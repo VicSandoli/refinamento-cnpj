@@ -75,6 +75,10 @@ REGRAS_VINCULADAS_RISCO = [
 REGRAS_VINCULADAS_DESCARTE = [
     (r"^\s*;", "Comentário"),
     (r"\brem\b", "Comentário 'rem'"),
+    (r"^\s*//", "Comentário '//'"),
+    (r"^\s*#;", "Comentário '#;'"),
+    # --- NOVAS REGRAS DE DESCARTE COM BASE NOS EXEMPLOS ---
+    (r"^\s*Do\s+.*\^.*\bVARIAVEL\b", "Chamada de Rotina (Do)"),
     (r"^\s*Write\s+.*\bVARIAVEL\b", "Escrita simples (Write)"),
     (r"^\s*(S|Set)\s+\w+\s*=\s*\bVARIAVEL\b\s*($|;)", "Atribuição Simples"),
     (r"\$\$\$PARAMETROS\s*\(.*\bVARIAVEL\b", "Uso em macro $$$PARAMETROS"),
