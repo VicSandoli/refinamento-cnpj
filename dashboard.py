@@ -561,9 +561,13 @@ elif pagina == "🔍 Explorador Interativo":
                 df_agrupado['Percentual'] = round((df_agrupado['Quantidade'] / df_agrupado['Quantidade'].sum()) * 100, 1)
                 df_agrupado['Percentual_Str'] = df_agrupado['Percentual'].astype(str) + '%'
                 
+                # Converter para string para evitar erros de serialização
+                df_display = df_agrupado[[agrupamento_por, 'Quantidade', 'Percentual_Str']].copy()
+                df_display = df_display.astype(str)
+                
                 # Exibir tabela com filtros por coluna
                 st.dataframe(
-                    df_agrupado[[agrupamento_por, 'Quantidade', 'Percentual_Str']],
+                    df_display,
                     use_container_width=True,
                     hide_index=True
                 )
