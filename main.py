@@ -51,12 +51,6 @@ REGRAS_VINCULADAS_RISCO = [
         "Extração de substring. A lógica pode estar incorreta para o novo formato de CNPJ (ex: raiz não tem mais 8 ou 12 caracteres)."
     ),
     (
-        "Uso em $ORDER",
-        r"\$O\s*\(\s*\^[A-Z0-9\.]+.*\bVARIAVEL\b",
-        "Médio", 2,
-        "Uso como subscrito em um laço $ORDER. A ordem de processamento será alterada de numérica para alfanumérica, impactando relatórios e processos."
-    ),
-    (
         "Comparação com Número",
         r"if\s+\bVARIAVEL\b\s*[=<>]\s*\d+",
         "Médio", 3,
@@ -73,12 +67,17 @@ REGRAS_VINCULADAS_RISCO = [
 
 # REGRAS DE DESCARTE: Também são vinculadas a uma variável.
 REGRAS_VINCULADAS_DESCARTE = [
+    # Descarte de strings literais (maior prioridade)
+    (r'^\s*(S|Set)\s+\w+\s*=\s*".*\bVARIAVEL\b.*"', "Atribuição de String Literal"),
+    (r'^\s*W(rite)?\s*!?,?\s*".*\bVARIAVEL\b.*"', "Escrita de String Literal"),
+    # Comentários
     (r"^\s*;", "Comentário"),
     (r"\brem\b", "Comentário 'rem'"),
     (r"^\s*//", "Comentário '//'"),
     (r"^\s*#;", "Comentário '#;'"),
     # --- NOVAS REGRAS DE DESCARTE COM BASE NOS EXEMPLOS ---
     (r"^\s*Do\s+.*\^.*\bVARIAVEL\b", "Chamada de Rotina (Do)"),
+    (r"\$O\s*\(.*\bVARIAVEL\b", "Uso em $ORDER"),
     (r"^\s*Write\s+.*\bVARIAVEL\b", "Escrita simples (Write)"),
     (r"^\s*(S|Set)\s+\w+\s*=\s*\bVARIAVEL\b\s*($|;)", "Atribuição Simples"),
     (r"\$\$\$PARAMETROS\s*\(.*\bVARIAVEL\b", "Uso em macro $$$PARAMETROS"),
@@ -196,6 +195,17 @@ def main():
 
             arquivo, num_linha, codigo = extrair_info_linha(linha_bruta.strip())
             if not arquivo:
+                continue
+
+            # Otimização: Descartar rotinas não oficiais no início
+            if classificar_arquivo(arquivo) == 'Não Oficiais':
+                # Adiciona ao log de descarte e pula para a próxima linha
+                match_var_descarte = re.search(variaveis_regex, codigo, re.IGNORECASE)
+                var_encontrada_descarte = match_var_descarte.group(0) if match_var_descarte else "N/A"
+                resultados_descartados.append({
+                    "Arquivo": arquivo, "Linha": num_linha, "Variável": var_encontrada_descarte.upper(),
+                    "Regra de Descarte": "Rotina Não Oficial", "Código": codigo
+                })
                 continue
 
             foi_classificada = False
