@@ -78,89 +78,109 @@ df_impacto = dados.get("impacto")
 df_descartes = dados.get("descartes")
 df_nao_classificados = dados.get("sem_classificacao")
 
-# --- MÉTRICAS GERAIS ---
-st.header("Resumo Geral da Análise")
-
-total_impacto = len(df_impacto) if df_impacto is not None else 0
-total_descartado = len(df_descartes) if df_descartes is not None else 0
-total_sem_class = len(df_nao_classificados) if df_nao_classificados is not None else 0
-total_analisado = total_impacto + total_descartado + total_sem_class
-
-col1, col2, col3, col4 = st.columns(4)
-with col1:
-    st.metric(label="🔴 Pontos de Impacto", value=f"{total_impacto:,}".replace(",", "."))
-with col2:
-    st.metric(label="🟢 Itens Descartados", value=f"{total_descartado:,}".replace(",", "."))
-with col3:
-    st.metric(label="🟡 Sem Classificação", value=f"{total_sem_class:,}".replace(",", "."))
-with col4:
-    st.metric(label="Total de Linhas Relevantes", value=f"{total_analisado:,}".replace(",", "."))
+# --- ESTRUTURA DE ABAS ---
+tab_geral, tab_impacto, tab_descartes, tab_sem_class = st.tabs([
+    "Visão Geral", 
+    "🔴 Detalhes do Impacto", 
+    "🟢 Itens Descartados", 
+    "🟡 Itens Sem Classificação"
+])
 
 
-# --- SEÇÃO DE ANÁLISE VISUAL DO IMPACTO ---
-if df_impacto is not None and not df_impacto.empty:
-    st.header("Análise Detalhada dos Pontos de Impacto")
+with tab_geral:
+    st.header("Resumo Geral da Análise")
 
-    # Gráficos em colunas
-    c1, c2 = st.columns(2)
+    # --- MÉTRICAS GERAIS ---
+    total_impacto = len(df_impacto) if df_impacto is not None else 0
+    total_descartado = len(df_descartes) if df_descartes is not None else 0
+    total_sem_class = len(df_nao_classificados) if df_nao_classificados is not None else 0
+    total_analisado = total_impacto + total_descartado + total_sem_class
 
-    with c1:
-        # Gráfico 1: Impacto por Nível de Risco
-        st.subheader("Impacto por Nível de Risco")
-        contagem_risco = df_impacto['Nível de Risco'].value_counts().reset_index()
-        contagem_risco.columns = ['Nível de Risco', 'Contagem']
-        fig_risco = px.bar(
-            contagem_risco,
-            x='Nível de Risco',
-            y='Contagem',
-            title="Distribuição de Ocorrências por Risco",
-            color='Nível de Risco',
-            color_discrete_map={'Alto': '#FF4B4B', 'Médio': '#FFD700', 'Baixo': '#4CAF50'},
-            text_auto=True
-        )
-        fig_risco.update_layout(showlegend=False)
-        st.plotly_chart(fig_risco, use_container_width=True)
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric(label="Pontos de Impacto", value=f"{total_impacto:,}".replace(",", "."))
+    with col2:
+        st.metric(label="Itens Descartados", value=f"{total_descartado:,}".replace(",", "."))
+    with col3:
+        st.metric(label="Sem Classificação", value=f"{total_sem_class:,}".replace(",", "."))
+    with col4:
+        st.metric(label="Total de Linhas Relevantes", value=f"{total_analisado:,}".replace(",", "."))
 
-    with c2:
-        # Gráfico 2: Impacto por Classificação de Arquivo
-        st.subheader("Impacto por Classificação de Arquivo")
-        contagem_classificacao = df_impacto['Classificação'].value_counts().reset_index()
-        contagem_classificacao.columns = ['Classificação', 'Contagem']
-        fig_classificacao = px.pie(
-            contagem_classificacao,
-            names='Classificação',
-            values='Contagem',
-            title="Proporção de Impacto por Tipo de Módulo",
-            hole=0.4
-        )
-        st.plotly_chart(fig_classificacao, use_container_width=True)
+    st.markdown("<hr/>", unsafe_allow_html=True) # Divisor
 
-    # Gráfico 3: Padrões de Risco Mais Comuns
-    st.subheader("Padrões de Risco Mais Frequentes")
-    contagem_padrao = df_impacto['Padrão de Risco'].value_counts().nlargest(10).reset_index()
-    contagem_padrao.columns = ['Padrão de Risco', 'Contagem']
-    fig_padrao = px.bar(
-        contagem_padrao,
-        y='Padrão de Risco',
-        x='Contagem',
-        orientation='h',
-        title="Top 10 Padrões de Risco Encontrados",
-        text_auto=True
-    )
-    fig_padrao.update_yaxes(categoryorder="total ascending")
-    st.plotly_chart(fig_padrao, use_container_width=True)
+    # --- MÉTRICAS ADICIONAIS ---
+    if df_impacto is not None and not df_impacto.empty:
+        arquivos_unicos = df_impacto['Arquivo'].nunique()
+        pontos_risco_alto = len(df_impacto[df_impacto['Nível de Risco'] == 'Alto'])
+        perc_risco = (total_impacto / total_analisado * 100) if total_analisado > 0 else 0
 
-# --- SEÇÃO DE DETALHAMENTO DOS DADOS (EXPANDERS) ---
-st.header("Detalhamento dos Dados")
+        col5, col6, col7 = st.columns(3)
+        with col5:
+            st.metric(label="Arquivos Únicos Impactados", value=f"{arquivos_unicos:,}".replace(",", "."))
+        with col6:
+            st.metric(label="🔴 Pontos de Risco Alto", value=f"{pontos_risco_alto:,}".replace(",", "."))
+        with col7:
+            st.metric(label="% de Risco", value=f"{perc_risco:.2f}%")
 
-if df_impacto is not None:
-    with st.expander("🔴 Visualizar Dados de Impacto"):
-        st.dataframe(df_impacto)
+    # --- GRÁFICOS DE RESUMO ---
+    if df_impacto is not None and not df_impacto.empty:
+        st.header("Análise Visual do Impacto")
 
-if df_descartes is not None:
-    with st.expander("🟢 Visualizar Itens Descartados"):
-        st.dataframe(df_descartes)
+        c1, c2 = st.columns(2)
+        with c1:
+            st.subheader("Impacto por Nível de Risco")
+            contagem_risco = df_impacto['Nível de Risco'].value_counts().reset_index()
+            contagem_risco.columns = ['Nível de Risco', 'Contagem']
+            fig_risco = px.bar(
+                contagem_risco, x='Nível de Risco', y='Contagem',
+                title="Distribuição de Ocorrências por Risco",
+                color='Nível de Risco',
+                color_discrete_map={'Alto': '#FF4B4B', 'Médio': '#FFD700', 'Baixo': '#4CAF50'},
+                text_auto=True
+            )
+            fig_risco.update_layout(showlegend=False)
+            st.plotly_chart(fig_risco, use_container_width=True)
         
-if df_nao_classificados is not None:
-    with st.expander("🟡 Visualizar Itens Sem Classificação"):
-        st.dataframe(df_nao_classificados) 
+        with c2:
+            st.subheader("Impacto por Classificação de Arquivo")
+            contagem_classificacao = df_impacto['Classificação'].value_counts().reset_index()
+            contagem_classificacao.columns = ['Classificação', 'Contagem']
+            fig_classificacao = px.pie(
+                contagem_classificacao, names='Classificação', values='Contagem',
+                title="Proporção de Impacto por Tipo de Módulo", hole=0.4
+            )
+            st.plotly_chart(fig_classificacao, use_container_width=True)
+
+with tab_impacto:
+    st.header("Exploração dos Pontos de Impacto")
+    if df_impacto is not None and not df_impacto.empty:
+        # Gráfico: Padrões de Risco Mais Comuns
+        st.subheader("Padrões de Risco Mais Frequentes")
+        contagem_padrao = df_impacto['Padrão de Risco'].value_counts().nlargest(10).reset_index()
+        contagem_padrao.columns = ['Padrão de Risco', 'Contagem']
+        fig_padrao = px.bar(
+            contagem_padrao, y='Padrão de Risco', x='Contagem', orientation='h',
+            title="Top 10 Padrões de Risco Encontrados", text_auto=True
+        )
+        fig_padrao.update_yaxes(categoryorder="total ascending")
+        st.plotly_chart(fig_padrao, use_container_width=True)
+        
+        # Tabela de dados
+        st.subheader("Dados Completos de Impacto")
+        st.dataframe(df_impacto)
+    else:
+        st.info("Nenhum dado de impacto para exibir.")
+
+with tab_descartes:
+    st.header("Consulta de Itens Descartados")
+    if df_descartes is not None:
+        st.dataframe(df_descartes)
+    else:
+        st.info("Nenhum item descartado para exibir.")
+
+with tab_sem_class:
+    st.header("Consulta de Itens Sem Classificação")
+    if df_nao_classificados is not None:
+        st.dataframe(df_nao_classificados)
+    else:
+        st.info("Nenhum item sem classificação para exibir.") 
