@@ -76,6 +76,7 @@ REGRAS_VINCULADAS_DESCARTE = [
     (r"^\s*//", "Comentário '//'"),
     (r"^\s*#;", "Comentário '#;'"),
     # --- NOVAS REGRAS DE DESCARTE COM BASE NOS EXEMPLOS ---
+    (r",\s*\w+\s*=\s*\bVARIAVEL\b", "Atribuição Simples (Múltiplos Comandos)"),
     (r"^\s*Do\s+.*\^.*\bVARIAVEL\b", "Chamada de Rotina (Do)"),
     (r"\$O\s*\(.*\bVARIAVEL\b", "Uso em $ORDER"),
     (r"^\s*Write\s+.*\bVARIAVEL\b", "Escrita simples (Write)"),
@@ -193,70 +194,74 @@ def main():
             if "Searching for" in linha_bruta or not linha_bruta.strip():
                 continue
 
-            arquivo, num_linha, codigo = extrair_info_linha(linha_bruta.strip())
+            arquivo, num_linha, codigo_original = extrair_info_linha(linha_bruta.strip())
             if not arquivo:
                 continue
 
+            # PRE-PROCESSAMENTO: remove comentários inline para análise mais precisa
+            codigo_para_analise = re.split(r'\s*//', codigo_original)[0].strip()
+
             # Otimização: Descartar rotinas não oficiais no início
             if classificar_arquivo(arquivo) == 'Não Oficiais':
-                # Adiciona ao log de descarte e pula para a próxima linha
-                match_var_descarte = re.search(variaveis_regex, codigo, re.IGNORECASE)
+                match_var_descarte = re.search(variaveis_regex, codigo_para_analise, re.IGNORECASE)
                 var_encontrada_descarte = match_var_descarte.group(0) if match_var_descarte else "N/A"
                 resultados_descartados.append({
                     "Arquivo": arquivo, "Linha": num_linha, "Variável": var_encontrada_descarte.upper(),
-                    "Regra de Descarte": "Rotina Não Oficial", "Código": codigo
+                    "Regra de Descarte": "Rotina Não Oficial", "Código": codigo_original
                 })
                 continue
 
             foi_classificada = False
 
             # 1. Análise de Regras Globais (maior prioridade)
-            resultado_global = analisar_regras_globais(codigo)
+            resultado_global = analisar_regras_globais(codigo_para_analise)
             if resultado_global:
                 regra, risco, pontos, just, padrao = resultado_global
                 resultados_impacto.append({
                     "Arquivo": arquivo, "Linha": num_linha, "Variável": f"Padrão Global: {padrao}",
                     "Nível de Risco": risco, "Complexidade (1-5)": pontos,
                     "Padrão de Risco": regra, "Justificativa / Ação Recomendada": just,
-                    "Código": codigo
+                    "Código": codigo_original
                 })
                 foi_classificada = True
 
             # 2. Análise Vinculada a Variável (se não classificada globalmente)
             if not foi_classificada:
-                match_var = re.search(variaveis_regex, codigo, re.IGNORECASE)
+                match_var = re.search(variaveis_regex, codigo_para_analise, re.IGNORECASE)
                 if match_var:
                     var_encontrada = match_var.group(0)
 
-                    # 2a. Checar Descarte
-                    motivo_descarte = checar_descarte_vinculado(codigo, var_encontrada)
-                    if motivo_descarte:
-                        resultados_descartados.append({
+                    # --- LÓGICA REORDENADA: RISCO PRIMEIRO ---
+                    # 2a. Checar Risco Vinculado
+                    resultado_risco = analisar_regras_vinculadas(codigo_para_analise, var_encontrada)
+                    if resultado_risco:
+                        regra, risco, pontos, just = resultado_risco
+                        resultados_impacto.append({
                             "Arquivo": arquivo, "Linha": num_linha, "Variável": var_encontrada.upper(),
-                            "Regra de Descarte": motivo_descarte, "Código": codigo
+                            "Nível de Risco": risco, "Complexidade (1-5)": pontos,
+                            "Padrão de Risco": regra, "Justificativa / Ação Recomendada": just,
+                            "Código": codigo_original
                         })
                         foi_classificada = True
                     else:
-                        # 2b. Checar Risco Vinculado
-                        resultado_risco = analisar_regras_vinculadas(codigo, var_encontrada)
-                        if resultado_risco:
-                            regra, risco, pontos, just = resultado_risco
-                            resultados_impacto.append({
+                        # 2b. Checar Descarte (apenas se não houver risco)
+                        motivo_descarte = checar_descarte_vinculado(codigo_para_analise, var_encontrada)
+                        if motivo_descarte:
+                            resultados_descartados.append({
                                 "Arquivo": arquivo, "Linha": num_linha, "Variável": var_encontrada.upper(),
-                                "Nível de Risco": risco, "Complexidade (1-5)": pontos,
-                                "Padrão de Risco": regra, "Justificativa / Ação Recomendada": just,
-                                "Código": codigo
+                                "Regra de Descarte": motivo_descarte, "Código": codigo_original
                             })
                             foi_classificada = True
 
+
             # 3. Coletar itens não classificados que contêm variáveis
             if not foi_classificada:
-                match_var = re.search(variaveis_regex, codigo, re.IGNORECASE)
-                if match_var:
+                 match_var = re.search(variaveis_regex, codigo_para_analise, re.IGNORECASE)
+                 if match_var:
                     resultados_sem_classificacao.append({
                         "Arquivo": arquivo, "Linha": num_linha,
                         "Variável Encontrada": match_var.group(0).upper(),
-                        "Código": codigo
+                        "Código": codigo_original
                     })
 
 
