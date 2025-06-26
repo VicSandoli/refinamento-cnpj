@@ -1,0 +1,20 @@
+name: dashboard-cnpj
+region: nyc
+services:
+- name: streamlit-dashboard
+  source_dir: /
+  github:
+    repo: SEU_USUARIO/refinamento-cnpj
+    branch: main
+    deploy_on_push: true
+  run_command: streamlit run dashboard.py --server.port=$PORT --server.address=0.0.0.0
+  environment_slug: python
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  health_check:
+    http_path: /
+  envs:
+  - key: STREAMLIT_SERVER_HEADLESS
+    value: "true"
+  - key: STREAMLIT_BROWSER_GATHER_USAGE_STATS  
+    value: "false" 
