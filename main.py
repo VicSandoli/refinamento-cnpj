@@ -9,146 +9,145 @@ import pandas as pd
 ARQUIVO_ENTRADA = 'CNPJresults_findStudio 3.txt'
 
 # 2. Nomes dos arquivos de saída que serão gerados
-ARQUIVO_SAIDA_IMPACTO = 'analise_impacto_cnpj_refinada.xlsx'
+ARQUIVO_SAIDA_AJUSTES = 'analise_ajustes_criticos.xlsx'
 ARQUIVO_SAIDA_DESCARTES = 'analise_descartes.xlsx'
-ARQUIVO_SAIDA_NAO_CLASSIFICADOS = 'analise_sem_classificacao.xlsx'
+ARQUIVO_SAIDA_DESCARTES_OFICIAIS = 'analise_descartes_oficiais.xlsx'
 ARQUIVO_SAIDA_PRECIFICACAO = 'analise_precificacao_proposta.xlsx'
 
 # 3. Arquivo com as variáveis a serem analisadas
 ARQUIVO_VARIAVEIS = 'CNPJ 1.csv'
 
 # --- CATEGORIAS PARA PRECIFICAÇÃO REALISTA ---
-
-# Premissa: Solução centralizada será implementada para tratar CNPJ alfanumérico
-# Estimativas por CATEGORIA (não por ponto individual)
+# Mantidas para gerar a estimativa de esforço final.
 CATEGORIAS_AJUSTE = {
     "VALIDACAO_ENTRADA": {
         "nome": "Validação e Entrada de Dados",
         "descricao": "Pontos que validam entrada de CNPJ - serão ajustados para usar função central",
-        "esforco_base": 56,  # horas totais para a categoria (+40%)
-        "esforco_testes": 22,  # horas de testes QA (+40%)
-        "observacao": "Implementação de função central + ajustes pontuais + validações específicas"
+        "esforco_base": 56, "esforco_testes": 22,
+        "observacao": "Implementação de função central + ajustes pontuais"
     },
     "FORMATACAO_EXIBICAO": {
         "nome": "Formatação e Exibição",
-        "descricao": "Pontos que formatam CNPJ para exibição - usarão função central de formatação",
-        "esforco_base": 30,  # horas totais (+25%)
-        "esforco_testes": 10,  # horas de testes QA (+25%)
-        "observacao": "Substituição por chamadas à função central + ajustes de layout"
+        "descricao": "Pontos que formatam CNPJ para exibição - usarão função central",
+        "esforco_base": 30, "esforco_testes": 10,
+        "observacao": "Substituição por chamadas à função central"
     },
     "LOGICA_NEGOCIO": {
         "nome": "Lógica de Negócio Específica",
         "descricao": "Pontos com lógica específica que precisam revisão manual",
-        "esforco_base": 120, # horas totais (+50%)
-        "esforco_testes": 48,  # horas de testes QA (+50%)
-        "observacao": "Análise caso a caso + reengenharia + adaptação + testes específicos"
+        "esforco_base": 120, "esforco_testes": 48,
+        "observacao": "Análise caso a caso, reengenharia e testes específicos"
     },
     "INTEGRACAO_EXTERNA": {
         "nome": "Integrações Externas",
         "descricao": "Interfaces com sistemas externos - análise de compatibilidade",
-        "esforco_base": 50,  # horas totais (+56%)
-        "esforco_testes": 40,  # horas de testes QA (+67% - mais testes por ser integração)
-        "observacao": "Verificação de compatibilidade + adaptação + testes de integração"
+        "esforco_base": 50, "esforco_testes": 40,
+        "observacao": "Verificação de compatibilidade, adaptação e testes de integração"
     },
     "ESTRUTURA_DADOS": {
         "nome": "Estrutura de Dados",
         "descricao": "Ajustes em banco de dados, índices e consultas",
-        "esforco_base": 24,  # horas totais (+50%)
-        "esforco_testes": 12,  # horas de testes QA (+50%)
-        "observacao": "Revisão de tipos de dados + índices + performance + migração"
+        "esforco_base": 24, "esforco_testes": 12,
+        "observacao": "Revisão de tipos de dados, índices, performance e migração"
+    },
+    "REVISAO_MANUAL": {
+        "nome": "Revisão Manual Necessária",
+        "descricao": "Linhas que não se encaixam em padrões conhecidos e exigem análise",
+        "esforco_base": 2, "esforco_testes": 1, # Custo por ponto
+        "observacao": "Análise manual para determinar a categoria correta e o impacto"
     }
 }
 
-# --- REGRAS SIMPLIFICADAS PARA CATEGORIZAÇÃO ---
-
-# REGRAS GLOBAIS: Verificadas em TODAS as linhas
-REGRAS_GLOBAIS_CATEGORIAS = [
-    (
-        "Máscara Numérica Explícita",
-        r"\?\d*N",
-        "VALIDACAO_ENTRADA",
-        "Máscara que força entrada numérica - precisa aceitar alfanumérico."
-    ),
+# --- REGRAS DE DESCARTE DE ALTA CONFIANÇA ---
+# Se uma linha corresponder a qualquer uma destas regras, será descartada.
+REGRAS_DESCARTE_CONFIANCA = [
+    ("Comentário", r"^\s*(;.*|//.*|#;.*|rem\s)"),
+    ("String Literal", r'".*\bVARIAVEL\b.*"'),
+    # Regra aprimorada para ser mais específica e evitar descartar atribuições que usam a variável
+    ("Atribuição Simples (de variável)", r"^\s*(S|Set)\s+\w+\s*=\s*\bVARIAVEL\b\s*($|;|,|!)"),
+    # Regra aprimorada para permitir propriedades de objeto (ponto) e variáveis com '%'
+    ("Atribuição Simples (para variável)", r"^\s*(S|Set)\s+\bVARIAVEL\b\s*=\s*[%.\w]+\s*($|;|,|!)"),
+    # Regra expandida para cobrir atribuições em lista, como S ALT=0,CCLI=""
+    ("Set para Vazio", r'^\s*(S|Set)\s+.*\bVARIAVEL\b\s*=\s*""|,\s*\bVARIAVEL\b\s*=\s*""'),
+    # Nova regra, focada apenas na comparação
+    ("Comparação com Vazio", r"if\s+'?\bVARIAVEL\b'?\s*=\s*"""),
+    # Nova regra para comparação com strings fixas
+    ("Comparação com String Fixa", r"^\s*(I|If)\s+'?\bVARIAVEL\b'?\s*=\s*"".*"""),
+    ("Uso como Parâmetro Simples", r"(\(|,)\s*\bVARIAVEL\b\s*(\)|,)"),
+    ("Parâmetro em Chamada de Método/Função", r"(##class\(|##super\(|\$\$\w+\^)\([^)]*\bVARIAVEL\b[^)]*\)"),
+    ("Chamada de Rotina (Do)", r"^\s*Do\s+.*\^.*\bVARIAVEL\b"),
+    ("Uso em $ORDER", r"\$O\s*\(.*\bVARIAVEL\b"),
+    # Nova regra para o comando Kill
+    ("Comando Kill", r"^\s*(K|Kill)\s+.*?\bVARIAVEL\b"),
+    # Regra aprimorada para incluir a abreviação 'N' e ser mais precisa
+    ("Declaração New", r"^\s*(N|New)\s+.*?\bVARIAVEL\b"),
+    ("Verificação de Existência ($D, $G)", r"(if\s+\$G|\$D)\(.*\bVARIAVEL\b"),
 ]
 
-# REGRAS VINCULADAS: Verificadas apenas em linhas que contêm uma variável alvo
-REGRAS_VINCULADAS_CATEGORIAS = [
+# --- REGRAS PARA IDENTIFICAR AJUSTES CRÍTICOS ---
+# Todas as linhas não descartadas serão testadas contra estas regras.
+REGRAS_AJUSTE_CRITICO = [
     # --- VALIDAÇÃO E ENTRADA ---
     (
-        "Validação de Entrada",
-        r"(if.*\bVARIAVEL\b.*[=<>]\s*\d+|\$L\(.*\bVARIAVEL\b.*\)\s*[=<>]\s*1[14])",
-        "VALIDACAO_ENTRADA",
-        "Validação que assume formato/comprimento específico - usar função central."
+        "Máscara Numérica Explícita", r"\?\d*N", "VALIDACAO_ENTRADA",
+        "Máscara que força entrada numérica - precisa aceitar alfanumérico."
     ),
     (
-        "Conversão Numérica",
-        r"(\$NUMBER\s*\(\s*\bVARIAVEL\b|if.*\bVARIAVEL\b.*[+\-*/])",
-        "VALIDACAO_ENTRADA",
-        "Conversão para número ou operação aritmética - usar função central."
+        "Validação de Comprimento", r"\$L(ENGTH)?\s*\(\s*\bVARIAVEL\b.*\)\s*[=<>]\s*(11|14)", "VALIDACAO_ENTRADA",
+        "Validação de tamanho fixo - precisa ser flexibilizada."
     ),
-    
-    # --- FORMATAÇÃO E EXIBIÇÃO ---
     (
-        "Formatação Manual",
-        r'(\bVARIAVEL\b\s*_\s*"[\./-]"|Write.*\bVARIAVEL\b)',
-        "FORMATACAO_EXIBICAO",
-        "Formatação manual para exibição - usar função central de formatação."
+        "Conversão/Operação Numérica", r"(\$NUMBER|\$ZSTRIP)\s*\(\s*\bVARIAVEL\b|\bVARIAVEL\b\s*[\+\-\*\/]\s*\d+|\d+\s*[\+\-\*\/]\s*\bVARIAVEL\b", "VALIDACAO_ENTRADA",
+        "Conversão para número ou operação aritmética - falhará com alfanumérico."
     ),
-    
     # --- LÓGICA DE NEGÓCIO ---
     (
-        "Extração de CNPJ Raiz",
-        r"(\$E|\$EXTRACT)\s*\(\s*\bVARIAVEL\b\s*,\s*1\s*,\s*(8|12)\s*\)",
-        "LOGICA_NEGOCIO",
-        "Extração de raiz com comprimento fixo - revisar lógica para alfanumérico."
+        "Padding com Soma", r"(1000000\d{6,}\s*\+\s*\bVARIAVEL\b|\bVARIAVEL\b\s*\+\s*1000000\d{6,})", "LOGICA_NEGOCIO",
+        "Técnica de padding com soma para ordenação/comparação - incompatível com alfanumérico."
     ),
     (
-        "Manipulação Específica",
-        r"(\$E|\$EXTRACT)\s*\(\s*\bVARIAVEL\b",
-        "LOGICA_NEGOCIO",
-        "Manipulação específica de substring - verificar se permanece válida."
+        "Extração de Substring ($E, $EXTRACT)", r"(\$E|\$EXTRACT)\s*\(\s*\bVARIAVEL\b", "LOGICA_NEGOCIO",
+        "Extração de partes do CNPJ (raiz, filial) - a lógica pode precisar de revisão."
     ),
-    
+    (
+        "Parsing com $PIECE", r"\$P(IECE)?\s*\(\s*\bVARIAVEL\b", "LOGICA_NEGOCIO",
+        "Parsing da variável - pode ser afetado se o delimitador for um número."
+    ),
+    # --- FORMATAÇÃO E EXIBIÇÃO ---
+    (
+        "Formatação Manual para Exibição", r"(\bVARIAVEL\b\s*_\s*""[\.\/\-]"")|W(RITE)?\s+.*\bVARIAVEL\b", "FORMATACAO_EXIBICAO",
+        "Formatação manual para exibição - deve ser substituída por função central."
+    ),
     # --- INTEGRAÇÃO EXTERNA ---
     (
-        "Interface Externa",
-        r"(HTTP|REST|SOAP|XML|JSON|EXPORT|IMPORT|FILE).*\bVARIAVEL\b|\bVARIAVEL\b.*(HTTP|REST|SOAP|XML|JSON|EXPORT|IMPORT|FILE)",
-        "INTEGRACAO_EXTERNA",
-        "Interface externa - verificar se destino suporta CNPJ alfanumérico."
+        "Uso em Contexto de Integração", r"(HTTP|REST|SOAP|XML|JSON|EXPORT|IMPORT|FTP|FILE).*\bVARIAVEL\b", "INTEGRACAO_EXTERNA",
+        "Interface externa - verificar se o sistema destino suporta CNPJ alfanumérico."
     ),
-    
     # --- ESTRUTURA DE DADOS ---
     (
-        "Operação de Banco",
-        r"(SELECT|INSERT|UPDATE|DELETE|ORDER\s+BY|GROUP\s+BY|WHERE).*\bVARIAVEL\b",
-        "ESTRUTURA_DADOS",
-        "Operação de banco - verificar tipos de dados e performance."
+        "Uso em Operação de Banco", r"&(SQL|sql)\(.*\bVARIAVEL\b.*\)|(SELECT|INSERT|UPDATE|DELETE|WHERE|ORDER\s+BY).*\bVARIAVEL\b", "ESTRUTURA_DADOS",
+        "Operação de banco - verificar tipos de dados, índices e performance da consulta."
     ),
 ]
 
+
 def carregar_variaveis_alvo(caminho_csv):
-    """
-    Carrega dinamicamente as variáveis de um arquivo CSV.
-    Assume que o delimitador é ';' e as variáveis estão na 5ª coluna (índice 4).
-    Filtra para manter apenas nomes de variáveis válidos.
-    """
+    """Carrega as variáveis de um arquivo CSV, filtrando nomes válidos."""
     if not os.path.exists(caminho_csv):
         print(f"ERRO: Arquivo de variáveis '{caminho_csv}' não encontrado.")
         return []
-
-    variaveis = set()
-    with open(caminho_csv, 'r', encoding='utf-8', errors='ignore') as f:
-        reader = csv.reader(f, delimiter=';')
-        next(reader, None)  # Pula o cabeçalho
-        for row in reader:
-            if len(row) > 4 and row[4].strip():
-                var = row[4].strip()
-                # Filtro simples para nomes de variáveis (começa com letra, pode ter números/underline)
-                if re.match(r'^[a-zA-Z][a-zA-Z0-9_]*$', var):
-                    variaveis.add(var)
-    
-    print(f"{len(variaveis)} variáveis carregadas de {caminho_csv}")
-    return list(variaveis)
+    try:
+        df = pd.read_csv(caminho_csv, sep=';', usecols=['codigo'], encoding='utf-8', on_bad_lines='skip')
+        df.dropna(subset=['codigo'], inplace=True)
+        variaveis = df['codigo'].str.strip().unique()
+        # Filtro para garantir que são nomes de variáveis válidos em Mumps
+        filtro_regex = r'^[a-zA-Z%][a-zA-Z0-9]*$'
+        variaveis_validas = {var for var in variaveis if isinstance(var, str) and re.match(filtro_regex, var)}
+        print(f"{len(variaveis_validas)} variáveis únicas e válidas carregadas de {caminho_csv}")
+        return list(variaveis_validas)
+    except Exception as e:
+        print(f"ERRO ao ler o arquivo de variáveis '{caminho_csv}': {e}")
+        return []
 
 
 def extrair_info_linha(linha):
@@ -158,206 +157,6 @@ def extrair_info_linha(linha):
         return match.groups()
     return None, None, None
 
-# --- FUNÇÕES DE ANÁLISE REESTRUTURADAS ---
-
-def analisar_regras_globais(codigo):
-    """Aplica as regras globais de categorização ao código."""
-    for nome, regex, categoria, just in REGRAS_GLOBAIS_CATEGORIAS:
-        if re.search(regex, codigo, re.IGNORECASE):
-            return nome, categoria, just, regex
-    return None
-
-def analisar_regras_vinculadas(codigo, var_alvo):
-    """Aplica as regras vinculadas de categorização a uma variável específica."""
-    for nome, regex, categoria, just in REGRAS_VINCULADAS_CATEGORIAS:
-        regex_var = regex.replace('VARIAVEL', var_alvo)
-        if re.search(regex_var, codigo, re.IGNORECASE):
-            return nome, categoria, just
-    return None
-
-def gerar_relatorio_precificacao_realista(df_impacto):
-    """Gera relatório de precificação baseado em categorias de ajuste (não por ponto)."""
-    if df_impacto.empty:
-        print("\nNenhum dado para relatório de precificação.")
-        return
-    
-    # Adicionar colunas auxiliares
-    df_impacto['Classificação'] = df_impacto['Arquivo'].apply(classificar_arquivo)
-    
-    # Filtrar apenas rotinas oficiais
-    df_oficiais = df_impacto[df_impacto['Classificação'] == 'Oficiais'].copy()
-    
-    print(f"📊 Análise focada em ROTINAS OFICIAIS: {len(df_oficiais)} pontos de {len(df_impacto)} totais")
-    
-    if df_oficiais.empty:
-        print("Nenhuma rotina oficial encontrada.")
-        return
-    
-    # Contar pontos por categoria
-    contagem_categorias = df_oficiais['Categoria'].value_counts()
-    
-    # 1. Summary por Categoria de Ajuste
-    summary_categorias = []
-    total_dev = 0
-    total_testes = 0
-    
-    for categoria, config in CATEGORIAS_AJUSTE.items():
-        pontos_categoria = contagem_categorias.get(categoria, 0)
-        
-        if pontos_categoria > 0:
-            # Esforço base + proporcional ao número de pontos (máximo 50% extra)
-            fator_pontos = min(1 + (pontos_categoria - 1) * 0.1, 1.5)  # Max 50% extra
-            esforco_dev = round(config["esforco_base"] * fator_pontos)
-            esforco_testes = round(config["esforco_testes"] * fator_pontos)
-            
-            total_dev += esforco_dev
-            total_testes += esforco_testes
-            
-            summary_categorias.append({
-                "Categoria": config["nome"],
-                "Pontos Identificados": str(pontos_categoria),  # Converter para string
-                "Esforço Dev (h)": esforco_dev,
-                "Esforço Testes (h)": esforco_testes,
-                "Total (h)": esforco_dev + esforco_testes,
-                "Observação": config["observacao"],
-                "Descrição": config["descricao"]
-            })
-    
-    # 2. Esforço da Solução Central
-    esforco_central = {
-        "Categoria": "Solução Central - Funções Base",
-        "Pontos Identificados": "Base",  # String consistente
-        "Esforço Dev (h)": 120,  # Desenvolvimento das funções centrais
-        "Esforço Testes (h)": 40,   # Testes unitários das funções centrais
-        "Total (h)": 160,
-        "Observação": "Funções de validação, formatação e utilitários CNPJ alfanumérico",
-        "Descrição": "Desenvolvimento das funções centralizadas que serão usadas em todo o sistema"
-    }
-    
-    # Adicionar solução central no início
-    summary_categorias.insert(0, esforco_central)
-    total_dev += 120
-    total_testes += 40
-    
-    # 3. Summary Executivo
-    total_geral = total_dev + total_testes
-    
-    summary_executivo = [{
-        "Métrica": "Esforço Desenvolvimento",
-        "Valor": f"{total_dev}h",
-        "Observação": "Desenvolvimento + adaptações pontuais"
-    }, {
-        "Métrica": "Esforço Testes QA", 
-        "Valor": f"{total_testes}h",
-        "Observação": "Testes unitários + integração + regressão"
-    }, {
-        "Métrica": "Total Estimado",
-        "Valor": f"{total_geral}h",
-        "Observação": "Estimativa realista considerando solução centralizada"
-    }, {
-        "Métrica": "Pontos Oficiais Analisados",
-        "Valor": str(len(df_oficiais)),  # Converter para string
-        "Observação": "Apenas rotinas oficiais consideradas"
-    }, {
-        "Métrica": "Estimativa com Buffer 20%",
-        "Valor": f"{round(total_geral * 1.2)}h",
-        "Observação": "Margem para imprevistos (mais conservadora)"
-    }]
-    
-    # 4. Distribuição por Módulo (apenas oficiais)
-    df_oficiais['Prefixo'] = df_oficiais['Arquivo'].str[:3].str.upper()
-    summary_modulos = []
-    
-    for prefixo in sorted(df_oficiais['Prefixo'].unique()):
-        dados_modulo = df_oficiais[df_oficiais['Prefixo'] == prefixo]
-        categorias_modulo = dados_modulo['Categoria'].value_counts()
-        
-        summary_modulos.append({
-            "Prefixo Módulo": prefixo,
-            "Pontos Totais": str(len(dados_modulo)),  # Converter para string
-            "Categorias": ', '.join([f"{cat}({qtd})" for cat, qtd in categorias_modulo.items()]),
-            "% dos Pontos": round((len(dados_modulo) / len(df_oficiais)) * 100, 1)
-        })
-    
-    # Salvar relatórios
-    try:
-        with pd.ExcelWriter(ARQUIVO_SAIDA_PRECIFICACAO, engine='openpyxl') as writer:
-            # Aba 1: Summary Executivo
-            pd.DataFrame(summary_executivo).to_excel(
-                writer, sheet_name='1_Summary_Executivo', index=False
-            )
-            
-            # Aba 2: Por Categoria de Ajuste
-            pd.DataFrame(summary_categorias).to_excel(
-                writer, sheet_name='2_Por_Categoria_Ajuste', index=False
-            )
-            
-            # Aba 3: Por Módulo
-            pd.DataFrame(summary_modulos).to_excel(
-                writer, sheet_name='3_Por_Modulo_Oficiais', index=False
-            )
-            
-            # Aba 4: Detalhamento de pontos críticos  
-            if len(df_oficiais) > 0:
-                pontos_criticos = df_oficiais.head(20)[
-                    ['Arquivo', 'Linha', 'Categoria', 'Padrão', 'Justificativa', 'Código']
-                ]
-            else:
-                pontos_criticos = pd.DataFrame()
-            pontos_criticos.to_excel(
-                writer, sheet_name='4_Pontos_Criticos', index=False
-            )
-            
-        print(f"Relatório de precificação realista salvo em: {ARQUIVO_SAIDA_PRECIFICACAO}")
-        print(f"📊 RESUMO EXECUTIVO:")
-        print(f"   • Pontos oficiais analisados: {len(df_oficiais)}")
-        print(f"   • Desenvolvimento: {total_dev}h")
-        print(f"   • Testes QA: {total_testes}h") 
-        print(f"   • Total: {total_geral}h")
-        print(f"   • Com buffer 20%: {round(total_geral * 1.2)}h")
-        
-    except Exception as e:
-        print(f"ERRO ao salvar relatório de precificação: {e}")
-
-# REGRAS DE DESCARTE: mantidas do código original
-REGRAS_VINCULADAS_DESCARTE = [
-    # Descarte de strings literais (maior prioridade)
-    (r'^\s*(S|Set)\s+\w+\s*=\s*".*\bVARIAVEL\b.*"', "Atribuição de String Literal"),
-    (r'^\s*W(rite)?\s*!?,?\s*".*\bVARIAVEL\b.*"', "Escrita de String Literal"),
-    # Comentários
-    (r"^\s*;", "Comentário"),
-    (r"\brem\b", "Comentário 'rem'"),
-    (r"^\s*//", "Comentário '//'"),
-    (r"^\s*#;", "Comentário '#;'"),
-    # Outras regras de descarte
-    (r",\s*\w+\s*=\s*\bVARIAVEL\b", "Atribuição Simples (Múltiplos Comandos)"),
-    (r"^\s*Do\s+.*\^.*\bVARIAVEL\b", "Chamada de Rotina (Do)"),
-    (r"\$O\s*\(.*\bVARIAVEL\b", "Uso em $ORDER"),
-    (r"^\s*Write\s+.*\bVARIAVEL\b", "Escrita simples (Write)"),
-    (r"^\s*(S|Set)\s+\w+\s*=\s*\bVARIAVEL\b\s*($|;)", "Atribuição Simples"),
-    (r"\$\$\$PARAMETROS\s*\(.*\bVARIAVEL\b", "Uso em macro $$$PARAMETROS"),
-    (r"'\$D\(.*\bVARIAVEL\b.*\)", "Verificação de existência em Global ($D)"),
-    (r"New\s+.*\bVARIAVEL\b", "Declaração New"),
-    (r'S\s*\(?.*\bVARIAVEL\b.*\)?\s*=\s*""', "Inicialização para vazio"),
-    (r'Set\s+\bVARIAVEL\b\s*=\s*""', "Set para vazio"),
-    (r'if\s+\bVARIAVEL\b\s*=\s*""', "Comparação com vazio"),
-    (r'if\s+\bVARIAVEL\b\s*\'\s*=\s*""', "Comparação com vazio"),
-    (r"if\s+\$G\(\bVARIAVEL\b", "Verificação com $GET"),
-    (r'G:\bVARIAVEL\b\?1""', "GOTO se nulo"),
-    (r"Write\s+.*/CAMPO\s*\(" , "Escrita em campo de tela"),
-    (r"Set\s+.*\s*=\s*##class\(", "Chamada de método de classe"),
-    (r"\.cpfcnpj\s*=", "Atribuição a propriedade de objeto"),
-]
-
-
-
-def checar_descarte_vinculado(codigo, var_alvo):
-    """Verifica se a linha deve ser ignorada com base nas regras de descarte vinculadas."""
-    for regex, motivo in REGRAS_VINCULADAS_DESCARTE:
-        regex_var = regex.replace('VARIAVEL', var_alvo)
-        if re.search(regex_var, codigo, re.IGNORECASE):
-            return motivo
-    return None
 
 def classificar_arquivo(nome_arquivo):
     """Adiciona classificação 'Oficiais', 'Scripts' ou 'Não Oficiais'."""
@@ -373,29 +172,159 @@ def classificar_arquivo(nome_arquivo):
         return 'Oficiais'
     return 'Não Oficiais'
 
-def main():
-    print("--- INICIANDO ANÁLISE DE IMPACTO DE CNPJ ALFANUMÉRICO (v2) ---")
-    
-    VARIAVEIS_ALVO = carregar_variaveis_alvo(ARQUIVO_VARIAVEIS)
-    if not VARIAVEIS_ALVO:
-        print("Nenhuma variável alvo para analisar. Encerrando.")
+
+def checar_descarte(codigo, var_alvo):
+    """Verifica se a linha deve ser ignorada com base nas regras de descarte de alta confiança."""
+    for motivo, regex in REGRAS_DESCARTE_CONFIANCA:
+        regex_var = regex.replace('VARIAVEL', re.escape(var_alvo))
+        if re.search(regex_var, codigo, re.IGNORECASE):
+            return motivo
+    return None
+
+
+def analisar_ponto_critico(codigo, var_alvo):
+    """Aplica as regras de ajuste crítico e retorna a primeira correspondência."""
+    # Primeiro, verifica regras que não dependem da variável (globais)
+    for nome, regex, categoria, just in REGRAS_AJUSTE_CRITICO:
+        if 'VARIAVEL' not in regex:
+            if re.search(regex, codigo, re.IGNORECASE):
+                return nome, categoria, just, regex
+
+    # Depois, verifica regras vinculadas à variável
+    for nome, regex, categoria, just in REGRAS_AJUSTE_CRITICO:
+        if 'VARIAVEL' in regex:
+            regex_var = regex.replace('VARIAVEL', re.escape(var_alvo))
+            if re.search(regex_var, codigo, re.IGNORECASE):
+                return nome, categoria, just, regex_var
+
+    # Se nenhuma regra crítica corresponder, classifica para revisão manual
+    return "Revisão Manual Necessária", "REVISAO_MANUAL", "Não corresponde a nenhum padrão de ajuste ou descarte conhecido.", "N/A"
+
+
+def gerar_relatorio_precificacao_realista(df_ajustes):
+    """Gera relatório de precificação baseado nas categorias de ajuste."""
+    if df_ajustes.empty:
+        print("\nNenhum dado para gerar o relatório de precificação.")
         return
-        
+
+    # Focar análise apenas em rotinas oficiais
+    df_oficiais = df_ajustes[df_ajustes['Classificação'] == 'Oficiais'].copy()
+    print(f"\n📊 Análise de Esforço focada em ROTINAS OFICIAIS: {len(df_oficiais)} pontos de {len(df_ajustes)} totais.")
+    if df_oficiais.empty:
+        print("Nenhuma rotina oficial encontrada para estimativa de esforço.")
+        return
+
+    summary_categorias = []
+    total_dev = 0
+    total_testes = 0
+
+    # Agrupar por categoria para calcular o esforço
+    contagem_categorias = df_oficiais['Categoria'].value_counts()
+
+    for categoria_id, config in CATEGORIAS_AJUSTE.items():
+        pontos = contagem_categorias.get(categoria_id, 0)
+        if pontos > 0:
+            if categoria_id == "REVISAO_MANUAL":
+                # Custo por ponto para revisão manual
+                esforco_dev = config["esforco_base"] * pontos
+                esforco_testes = config["esforco_testes"] * pontos
+            else:
+                # Custo base da categoria + fator por pontos
+                fator_pontos = 1 + (pontos - 1) * 0.05 # Adicional de 5% por ponto extra
+                esforco_dev = round(config["esforco_base"] * fator_pontos)
+                esforco_testes = round(config["esforco_testes"] * fator_pontos)
+
+            total_dev += esforco_dev
+            total_testes += esforco_testes
+            summary_categorias.append({
+                "Categoria": config["nome"], "Pontos Identificados": pontos,
+                "Esforço Dev (h)": esforco_dev, "Esforço Testes (h)": esforco_testes,
+                "Total (h)": esforco_dev + esforco_testes, "Observação": config["observacao"],
+            })
+
+    # Adicionar o esforço da solução central (base)
+    esforco_central = {
+        "Categoria": "Solução Central - Funções Base", "Pontos Identificados": "N/A",
+        "Esforço Dev (h)": 120, "Esforço Testes (h)": 40, "Total (h)": 160,
+        "Observação": "Desenvolvimento de funções centrais de validação e formatação.",
+    }
+    summary_categorias.insert(0, esforco_central)
+    total_dev += 120
+    total_testes += 40
+    total_geral = total_dev + total_testes
+
+    summary_executivo = [
+        {"Métrica": "Esforço Desenvolvimento", "Valor": f"{total_dev}h"},
+        {"Métrica": "Esforço Testes QA", "Valor": f"{total_testes}h"},
+        {"Métrica": "Total Estimado", "Valor": f"{total_geral}h"},
+        {"Métrica": "Estimativa com Buffer (20%)", "Valor": f"{round(total_geral * 1.2)}h"},
+        {"Métrica": "Pontos Críticos (Oficiais)", "Valor": len(df_oficiais)},
+    ]
+
+    try:
+        with pd.ExcelWriter(ARQUIVO_SAIDA_PRECIFICACAO, engine='openpyxl') as writer:
+            pd.DataFrame(summary_executivo).to_excel(writer, sheet_name='1_Summary_Executivo', index=False)
+            pd.DataFrame(summary_categorias).to_excel(writer, sheet_name='2_Estimativa_Por_Categoria', index=False)
+            # Adicionar aba com detalhamento dos pontos oficiais
+            df_oficiais_detalhe = df_oficiais[['Arquivo', 'Linha', 'Categoria', 'Padrão', 'Justificativa', 'Código']]
+            df_oficiais_detalhe.to_excel(writer, sheet_name='3_Detalhe_Pontos_Oficiais', index=False)
+        print(f"Relatório de precificação salvo em: {ARQUIVO_SAIDA_PRECIFICACAO}")
+        print(f"   -> Total Estimado: {total_geral}h | Com Buffer (20%): {round(total_geral * 1.2)}h")
+    except Exception as e:
+        print(f"ERRO ao salvar relatório de precificação: {e}")
+
+
+def salvar_excel(df, nome_arquivo, colunas_ordem):
+    """Função auxiliar para salvar DataFrames em Excel com formatação."""
+    if df.empty:
+        print(f"\nNenhum item para salvar em '{nome_arquivo}'.")
+        return
+
+    df_copy = df.copy()
+    df_copy['Prefixo'] = df_copy['Arquivo'].str[:3].str.upper()
+    df_copy['Classificação'] = df_copy['Arquivo'].apply(classificar_arquivo)
+    df_copy['LinhaInt'] = pd.to_numeric(df_copy['Linha'])
+
+    # Ordenar para melhor visualização
+    if "Categoria" in df_copy.columns:
+        df_copy = df_copy.sort_values(by=['Classificação', 'Arquivo', 'LinhaInt'])
+    else:
+        df_copy = df_copy.sort_values(by=['Arquivo', 'LinhaInt'])
+
+    colunas_presentes = df_copy.columns.tolist()
+    colunas_finais = [col for col in colunas_ordem if col in colunas_presentes]
+    df_final = df_copy[colunas_finais]
+
+    try:
+        df_final.to_excel(nome_arquivo, index=False, engine='openpyxl')
+        print(f"Relatório salvo em: {nome_arquivo}")
+    except Exception as e:
+        print(f"ERRO ao salvar o arquivo '{nome_arquivo}': {e}")
+
+
+def main():
+    print("--- INICIANDO ANÁLISE DE IMPACTO DE CNPJ ALFANUMÉRICO (v4 - com deduplicação) ---")
+
+    VARIAVEIS_ALVO = carregar_variaveis_alvo(ARQUIVO_VARIAVEIS)
+    
+    # IBSRIC é especial e não uma variável comum
+    is_ibsric_special = 'IBSRIC' in VARIAVEIS_ALVO
+    if is_ibsric_special:
+        VARIAVEIS_ALVO.remove('IBSRIC')
+        print("Info: 'IBSRIC' será tratado como uma chamada de sub-rotina especial.")
+
     print(f"Analisando o arquivo: {ARQUIVO_ENTRADA}")
     if not os.path.exists(ARQUIVO_ENTRADA):
         print(f"ERRO: Arquivo de entrada não encontrado em '{ARQUIVO_ENTRADA}'")
         return
 
-    variaveis_regex = r"\b(" + "|".join(re.escape(var) for var in VARIAVEIS_ALVO) + r")\b"
+    # Etapa 1: Ler o arquivo de entrada e agrupar por linha de código única
+    linhas_unicas = {}
+    variaveis_regex = r"\b(" + "|".join(re.escape(var) for var in VARIAVEIS_ALVO) + r")\b" if VARIAVEIS_ALVO else None
 
-    resultados_impacto = []
-    resultados_descartados = []
-    resultados_sem_classificacao = []
-    
-    linhas_analisadas = 0
+    print("Etapa 1: Lendo e agrupando linhas de código únicas...")
     with open(ARQUIVO_ENTRADA, 'r', encoding='utf-8', errors='ignore') as f_in:
         for linha_bruta in f_in:
-            linhas_analisadas += 1
             if "Searching for" in linha_bruta or not linha_bruta.strip():
                 continue
 
@@ -403,143 +332,126 @@ def main():
             if not arquivo:
                 continue
 
-            # PRE-PROCESSAMENTO: remove comentários inline para análise mais precisa
             codigo_para_analise = re.split(r'\s*//', codigo_original)[0].strip()
+            
+            vars_encontradas_na_linha = set()
+            if variaveis_regex:
+                vars_encontradas_na_linha.update(re.findall(variaveis_regex, codigo_para_analise, re.IGNORECASE))
+            
+            if is_ibsric_special and re.search(r'\bIBSRIC\b', codigo_para_analise, re.IGNORECASE):
+                vars_encontradas_na_linha.add('IBSRIC')
+            
+            if not vars_encontradas_na_linha:
+                continue
 
-            # Otimização: Descartar rotinas não oficiais no início
-            if classificar_arquivo(arquivo) == 'Não Oficiais':
-                match_var_descarte = re.search(variaveis_regex, codigo_para_analise, re.IGNORECASE)
-                var_encontrada_descarte = match_var_descarte.group(0) if match_var_descarte else "N/A"
-                resultados_descartados.append({
-                    "Arquivo": arquivo, "Linha": num_linha, "Variável": var_encontrada_descarte.upper(),
-                    "Regra de Descarte": "Rotina Não Oficial", "Código": codigo_original
+            chave = (arquivo, num_linha)
+            if chave not in linhas_unicas:
+                linhas_unicas[chave] = {'code': codigo_original, 'vars': set()}
+            
+            linhas_unicas[chave]['vars'].update(vars_encontradas_na_linha)
+
+    print(f"  - {len(linhas_unicas)} linhas de código únicas encontradas para análise.")
+
+    # Etapa 2: Classificar cada linha de código única
+    print("Etapa 2: Classificando cada linha...")
+    resultados_ajustes = []
+    resultados_descartados = []
+
+    for (arquivo, num_linha), data in linhas_unicas.items():
+        codigo_original = data['code']
+        variaveis_encontradas = data['vars']
+        codigo_para_analise = re.split(r'\s*//', codigo_original)[0].strip()
+        variaveis_str = ", ".join(sorted(list(variaveis_encontradas)))
+        foi_classificada = False
+
+        # 2.1. Descarte por tipo de arquivo
+        classificacao = classificar_arquivo(arquivo)
+        if classificacao in ['Não Oficiais', 'Scripts']:
+            motivo = "Rotina de Script" if classificacao == 'Scripts' else "Rotina Não Oficial"
+            resultados_descartados.append({
+                "Arquivo": arquivo, "Linha": num_linha, "Variável": variaveis_str,
+                "Regra de Descarte": motivo, "Código": codigo_original
+            })
+            continue
+
+        # 2.2. Caso Especial: IBSRIC
+        if is_ibsric_special and 'IBSRIC' in variaveis_encontradas:
+            is_comment_or_literal = re.search(r'^\s*(;.*|//.*|#;.*|rem\s)|".*\bIBSRIC\b.*"', codigo_para_analise, re.IGNORECASE)
+            if not is_comment_or_literal:
+                resultados_ajustes.append({
+                    "Arquivo": arquivo, "Linha": num_linha, "Variável": variaveis_str,
+                    "Categoria": "CHAMADA_IBSRIC", "Padrão": "Chamada de Sub-rotina IBSRIC",
+                    "Justificativa": "Chamada à sub-rotina para escopo de teste.", "Código": codigo_original
                 })
                 continue
 
-            foi_classificada = False
-
-            # 1. Análise de Regras Globais (maior prioridade)
-            resultado_global = analisar_regras_globais(codigo_para_analise)
-            if resultado_global:
-                regra, categoria, just, padrao = resultado_global
-                resultados_impacto.append({
-                    "Arquivo": arquivo, "Linha": num_linha, "Variável": f"Padrão Global: {padrao}",
-                    "Categoria": categoria, "Padrão": regra, "Justificativa": just,
-                    "Código": codigo_original
-                })
-                foi_classificada = True
-
-            # 2. Análise Vinculada a Variável (se não classificada globalmente)
-            if not foi_classificada:
-                match_var = re.search(variaveis_regex, codigo_para_analise, re.IGNORECASE)
-                if match_var:
-                    var_encontrada = match_var.group(0)
-
-                    # 2a. Checar Categorização Vinculada
-                    resultado_categoria = analisar_regras_vinculadas(codigo_para_analise, var_encontrada)
-                    if resultado_categoria:
-                        regra, categoria, just = resultado_categoria
-                        resultados_impacto.append({
-                            "Arquivo": arquivo, "Linha": num_linha, "Variável": var_encontrada.upper(),
-                            "Categoria": categoria, "Padrão": regra, "Justificativa": just,
-                            "Código": codigo_original
-                        })
-                        foi_classificada = True
-                    else:
-                        # 2b. Checar Descarte (apenas se não houver categorização)
-                        motivo_descarte = checar_descarte_vinculado(codigo_para_analise, var_encontrada)
-                        if motivo_descarte:
-                            resultados_descartados.append({
-                                "Arquivo": arquivo, "Linha": num_linha, "Variável": var_encontrada.upper(),
-                                "Regra de Descarte": motivo_descarte, "Código": codigo_original
-                            })
-                            foi_classificada = True
-
-
-            # 3. Coletar itens não classificados que contêm variáveis
-            if not foi_classificada:
-                 match_var = re.search(variaveis_regex, codigo_para_analise, re.IGNORECASE)
-                 if match_var:
-                    resultados_sem_classificacao.append({
-                        "Arquivo": arquivo, "Linha": num_linha,
-                        "Variável Encontrada": match_var.group(0).upper(),
-                        "Código": codigo_original
+        # 2.3. Regras de Ajuste Crítico
+        vars_sem_ibsric = [v for v in variaveis_encontradas if v != 'IBSRIC']
+        if vars_sem_ibsric:
+            vars_regex_linha = r'\b(' + '|'.join(re.escape(v) for v in vars_sem_ibsric) + r')\b'
+            for nome, regex, categoria, just in REGRAS_AJUSTE_CRITICO:
+                regex_com_vars = regex.replace('VARIAVEL', vars_regex_linha)
+                if re.search(regex_com_vars, codigo_para_analise, re.IGNORECASE):
+                    resultados_ajustes.append({
+                        "Arquivo": arquivo, "Linha": num_linha, "Variável": variaveis_str,
+                        "Categoria": categoria, "Padrão": nome, "Justificativa": just, "Código": codigo_original
                     })
+                    foi_classificada = True
+                    break
+        if foi_classificada: continue
 
+        # 2.4. Regras de Descarte de Alta Confiança
+        if vars_sem_ibsric:
+            vars_regex_linha = r'\b(' + '|'.join(re.escape(v) for v in vars_sem_ibsric) + r')\b'
+            for motivo, regex in REGRAS_DESCARTE_CONFIANCA:
+                regex_com_vars = regex.replace('VARIAVEL', vars_regex_linha)
+                if re.search(regex_com_vars, codigo_para_analise, re.IGNORECASE):
+                    resultados_descartados.append({
+                        "Arquivo": arquivo, "Linha": num_linha, "Variável": variaveis_str,
+                        "Regra de Descarte": motivo, "Código": codigo_original
+                    })
+                    foi_classificada = True
+                    break
+        if foi_classificada: continue
+
+        # 2.5. Padrão: Se chegou aqui e não é só IBSRIC, é revisão manual
+        if vars_sem_ibsric:
+            resultados_ajustes.append({
+                "Arquivo": arquivo, "Linha": num_linha, "Variável": variaveis_str,
+                "Categoria": "REVISAO_MANUAL", "Padrão": "Revisão Manual Necessária", 
+                "Justificativa": "Não corresponde a nenhum padrão de ajuste ou descarte conhecido.",
+                "Código": codigo_original
+            })
 
     print(f"\nAnálise concluída.")
-    print(f"Total de linhas lidas: {linhas_analisadas}")
-    print(f"Pontos de impacto identificados: {len(resultados_impacto)}")
-    print(f"Itens descartados: {len(resultados_descartados)}")
-    print(f"Itens sem classificação: {len(resultados_sem_classificacao)}")
+    print(f"  - Total de linhas únicas analisadas: {len(linhas_unicas)}")
+    print(f"  - Pontos de ajuste crítico identificados: {len(resultados_ajustes)}")
+    print(f"  - Itens descartados: {len(resultados_descartados)}")
 
-    # Função auxiliar para salvar DataFrames
-    def salvar_excel(df, nome_arquivo, colunas_ordem):
-        if df.empty:
-            print(f"\nNenhum item para salvar em '{nome_arquivo}'.")
-            return
-        
-        df_copy = df.copy()
-        df_copy['Prefixo'] = df_copy['Arquivo'].str[:3].str.upper()
-        df_copy['Classificação'] = df_copy['Arquivo'].apply(classificar_arquivo)
-        df_copy['LinhaInt'] = pd.to_numeric(df_copy['Linha'])
-        
-        # Ordenação especial para o DataFrame de impacto
-        if "Categoria" in df_copy.columns:
-            # Ordenação por prioridade de categoria
-            ordem_categoria = {
-                "VALIDACAO_ENTRADA": 0,
-                "LOGICA_NEGOCIO": 1, 
-                "INTEGRACAO_EXTERNA": 2,
-                "ESTRUTURA_DADOS": 3,
-                "FORMATACAO_EXIBICAO": 4
-            }
-            df_copy['OrdemCategoria'] = df_copy['Categoria'].map(ordem_categoria).fillna(99)
-            df_copy = df_copy.sort_values(by=['OrdemCategoria', 'Arquivo', 'LinhaInt'], ascending=[True, True, True])
-        else:
-            df_copy = df_copy.sort_values(by=['Arquivo', 'LinhaInt'])
-
-        # Garante que todas as colunas esperadas existam antes de reordenar
-        colunas_presentes = df_copy.columns.tolist()
-        colunas_finais = [col for col in colunas_ordem if col in colunas_presentes]
-        
-        df_final = df_copy[colunas_finais]
-
-        try:
-            df_final.to_excel(nome_arquivo, index=False, engine='openpyxl')
-            print(f"Relatório salvo em: {nome_arquivo}")
-        except Exception as e:
-            print(f"ERRO ao salvar o arquivo '{nome_arquivo}': {e}")
-
-    # Gerar Relatório de Impacto
-    if resultados_impacto:
-        df_impacto = pd.DataFrame(resultados_impacto)
-        colunas_impacto = [
+    # Gerar Relatório de Ajustes Críticos
+    if resultados_ajustes:
+        df_ajustes = pd.DataFrame(resultados_ajustes)
+        df_ajustes['Prefixo'] = df_ajustes['Arquivo'].str[:3].str.upper()
+        df_ajustes['Classificação'] = df_ajustes['Arquivo'].apply(classificar_arquivo)
+        colunas_ajustes = [
             "Arquivo", "Prefixo", "Classificação", "Linha", "Variável",
             "Categoria", "Padrão", "Justificativa", "Código"
         ]
-        salvar_excel(df_impacto, ARQUIVO_SAIDA_IMPACTO, colunas_impacto)
-        
-        # Gerar Relatório de Precificação REALISTA (foco em rotinas oficiais)
-        gerar_relatorio_precificacao_realista(df_impacto)
+        salvar_excel(df_ajustes, ARQUIVO_SAIDA_AJUSTES, colunas_ajustes)
+        gerar_relatorio_precificacao_realista(df_ajustes)
 
     # Gerar Relatório de Descartes
     if resultados_descartados:
         df_descartados = pd.DataFrame(resultados_descartados)
+        df_descartados['Prefixo'] = df_descartados['Arquivo'].str[:3].str.upper()
+        df_descartados['Classificação'] = df_descartados['Arquivo'].apply(classificar_arquivo)
         colunas_descartes = [
             "Arquivo", "Prefixo", "Classificação", "Linha",
             "Variável", "Regra de Descarte", "Código"
         ]
         salvar_excel(df_descartados, ARQUIVO_SAIDA_DESCARTES, colunas_descartes)
-
-    # Gerar Relatório de Não Classificados
-    if resultados_sem_classificacao:
-        df_nao_classificados = pd.DataFrame(resultados_sem_classificacao)
-        colunas_nao_classificados = [
-            "Arquivo", "Prefixo", "Classificação", "Linha",
-            "Variável Encontrada", "Código"
-        ]
-        salvar_excel(df_nao_classificados, ARQUIVO_SAIDA_NAO_CLASSIFICADOS, colunas_nao_classificados)
+        df_descartes_oficiais = df_descartados[df_descartados['Classificação'] == 'Oficiais'].copy()
+        salvar_excel(df_descartes_oficiais, ARQUIVO_SAIDA_DESCARTES_OFICIAIS, colunas_descartes)
 
 if __name__ == "__main__":
     main()

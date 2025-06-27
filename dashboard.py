@@ -1009,7 +1009,8 @@ elif pagina == "📋 Dados Brutos":
                 classificacoes_nc = st.multiselect(
                     "🏷️ Classificação:",
                     df_nc['Classificação'].unique(),
-                    default=['Oficiais']
+                    default=['Oficiais'],
+                    key="nc_classificacoes"
                 )
             
             with col2:
