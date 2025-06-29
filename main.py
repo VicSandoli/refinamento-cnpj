@@ -14,9 +14,10 @@ ARQUIVO_SAIDA_DESCARTES = 'analise_descartes.xlsx'
 ARQUIVO_SAIDA_DESCARTES_OFICIAIS = 'analise_descartes_oficiais.xlsx'
 ARQUIVO_SAIDA_PRECIFICACAO = 'analise_precificacao_proposta.xlsx'
 ARQUIVO_SAIDA_DESCARTES_EXTRACAO = 'analise_descartes_extracao_simples.xlsx'
+ARQUIVO_SAIDA_RESUMO = 'analise_resumo_criticos_oficiais.xlsx'
 
-# 3. Arquivo com as variáveis a serem analisadas
-ARQUIVO_VARIAVEIS = 'CNPJ 1.csv'
+# 3. Arquivo com os termos de busca a serem analisados
+ARQUIVO_TERMOS = 'CNPJ 1.csv'
 
 # --- CATEGORIAS PARA PRECIFICAÇÃO REALISTA ---
 # Mantidas para gerar a estimativa de esforço final.
@@ -39,6 +40,12 @@ CATEGORIAS_AJUSTE = {
         "esforco_base": 120, "esforco_testes": 48,
         "observacao": "Análise caso a caso, reengenharia e testes específicos"
     },
+    "CHAMADA_SUBROTINA": {
+        "nome": "Chamada de Sub-rotina",
+        "descricao": "Pontos que chamam sub-rotinas relacionadas, precisam de análise de impacto.",
+        "esforco_base": 40, "esforco_testes": 16,
+        "observacao": "Análise do fluxo de dados de entrada e saída da sub-rotina."
+    },
     "ESTRUTURA_DADOS": {
         "nome": "Estrutura de Dados",
         "descricao": "Ajustes em banco de dados, índices e consultas",
@@ -56,7 +63,6 @@ CATEGORIAS_AJUSTE = {
 # --- REGRAS DE DESCARTE DE ALTA CONFIANÇA ---
 # Se uma linha corresponder a qualquer uma destas regras, será descartada.
 REGRAS_DESCARTE_CONFIANCA = [
-    ("Comentário", r"^\s*(;.*|//.*|#;.*|rem\s)"),
     # Movida para cima para ter prioridade sobre regras mais genéricas
     ("Extração Simples de Substring", r"(\$E|\$EXTRACT)\s*\(\s*\bVARIAVEL\b"),
     ("String Literal", r'".*\bVARIAVEL\b.*"'),
@@ -128,31 +134,35 @@ REGRAS_AJUSTE_CRITICO = [
 ]
 
 
-def carregar_variaveis_alvo(caminho_csv):
-    """Carrega os termos de busca de um arquivo CSV."""
+def carregar_termos_busca(caminho_csv):
+    """Carrega os termos de busca e seus tipos de um arquivo CSV."""
     if not os.path.exists(caminho_csv):
         print(f"ERRO: Arquivo de termos '{caminho_csv}' não encontrado.")
-        return []
+        return {}
     try:
-        # Simplificado para ler uma única coluna, sem separador estrito
-        df = pd.read_csv(caminho_csv, usecols=['codigo'], encoding='utf-8', on_bad_lines='skip')
-        df.dropna(subset=['codigo'], inplace=True)
-        # Converte para string para garantir consistência
-        termos = df['codigo'].astype(str).str.strip().unique()
-        # Remove o filtro de "variável válida" para aceitar qualquer termo (ex: "14N")
-        termos_validos = {termo for termo in termos if termo}
-        print(f"{len(termos_validos)} termos de busca únicos carregados de {caminho_csv}")
-        return list(termos_validos)
+        df = pd.read_csv(caminho_csv, sep=';', usecols=['termo', 'tipo'], encoding='utf-8', on_bad_lines='skip')
+        df.dropna(inplace=True)
+        df['termo'] = df['termo'].astype(str).str.strip()
+        df['tipo'] = df['tipo'].astype(str).str.strip()
+        termos_dict = dict(zip(df['termo'], df['tipo']))
+        print(f"{len(termos_dict)} termos de busca únicos carregados de {caminho_csv}")
+        return termos_dict
     except Exception as e:
         print(f"ERRO ao ler o arquivo de termos '{caminho_csv}': {e}")
-        return []
+        return {}
 
 
 def extrair_info_linha(linha):
-    """Extrai o nome do arquivo, número da linha e o código da linha de entrada."""
-    match = re.match(r"^(.*?)\((.*?)\):\s*(.*)", linha)
+    """Extrai o nome do arquivo, localizador e o código da linha de entrada."""
+    # Regex aprimorada para lidar com formatos como:
+    # arquivo(loc1): codigo
+    # arquivo(loc1)[loc2]: codigo
+    match = re.match(r"^(.*?)\((.*?)\)(.*?):\s*(.*)", linha)
     if match:
-        return match.groups()
+        arquivo, loc_parens, loc_brackets, codigo = match.groups()
+        # Combina as partes do localizador para criar um identificador único
+        localizador = loc_parens.strip() + loc_brackets.strip()
+        return arquivo.strip(), localizador, codigo.strip()
     return None, None, None
 
 
@@ -272,6 +282,30 @@ def gerar_relatorio_precificacao_realista(df_ajustes):
         print(f"ERRO ao salvar relatório de precificação: {e}")
 
 
+def gerar_relatorio_resumo(df_ajustes, nome_arquivo):
+    """Gera um relatório de resumo de pontos críticos por programa oficial."""
+    if df_ajustes.empty:
+        print("\nNenhum dado para gerar o relatório de resumo.")
+        return
+
+    df_oficiais = df_ajustes[df_ajustes['Classificação'] == 'Oficiais'].copy()
+    if df_oficiais.empty:
+        print("\nNenhuma rotina oficial encontrada para o resumo de pontos críticos.")
+        return
+
+    # Agrupar por arquivo e tipo, contar os pontos
+    df_resumo = df_oficiais.groupby(['Arquivo', 'Tipo Programa']).size().reset_index(name='Pontos Críticos')
+    
+    # Ordenar por quantidade de pontos críticos
+    df_resumo = df_resumo.sort_values(by='Pontos Críticos', ascending=False)
+    
+    try:
+        df_resumo.to_excel(nome_arquivo, index=False, engine='openpyxl')
+        print(f"Relatório de resumo salvo em: {nome_arquivo}")
+    except Exception as e:
+        print(f"ERRO ao salvar o arquivo de resumo '{nome_arquivo}': {e}")
+
+
 def salvar_excel(df, nome_arquivo, colunas_ordem):
     """Função auxiliar para salvar DataFrames em Excel com formatação."""
     if df.empty:
@@ -300,15 +334,11 @@ def salvar_excel(df, nome_arquivo, colunas_ordem):
 
 
 def main():
-    print("--- INICIANDO ANÁLISE DE IMPACTO DE CNPJ ALFANUMÉRICO (v4 - com deduplicação) ---")
+    print("--- INICIANDO ANÁLISE DE IMPACTO DE CNPJ ALFANUMÉRICO (v5 - com tipo de termo) ---")
 
-    VARIAVEIS_ALVO = carregar_variaveis_alvo(ARQUIVO_VARIAVEIS)
-    
-    # IBSRIC é especial e não uma variável comum
-    is_ibsric_special = 'IBSRIC' in VARIAVEIS_ALVO
-    if is_ibsric_special:
-        VARIAVEIS_ALVO.remove('IBSRIC')
-        print("Info: 'IBSRIC' será tratado como uma chamada de sub-rotina especial.")
+    termos_busca = carregar_termos_busca(ARQUIVO_TERMOS)
+    if not termos_busca:
+        return
 
     print(f"Analisando o arquivo: {ARQUIVO_ENTRADA}")
     if not os.path.exists(ARQUIVO_ENTRADA):
@@ -317,37 +347,56 @@ def main():
 
     # Etapa 1: Ler o arquivo de entrada e agrupar por linha de código única
     linhas_unicas = {}
-    variaveis_regex = r"\b(" + "|".join(re.escape(var) for var in VARIAVEIS_ALVO) + r")\b" if VARIAVEIS_ALVO else None
-
-    print("Etapa 1: Lendo e agrupando linhas de código únicas...")
+    linhas_ignoradas = []
+    print("Etapa 1: Lendo, buscando termos e agrupando linhas de código únicas...")
     with open(ARQUIVO_ENTRADA, 'r', encoding='utf-8', errors='ignore') as f_in:
         for linha_bruta in f_in:
-            if "Searching for" in linha_bruta or not linha_bruta.strip():
+            linha_strip = linha_bruta.strip()
+            if "Searching for" in linha_strip or not linha_strip:
                 continue
 
-            arquivo, num_linha, codigo_original = extrair_info_linha(linha_bruta.strip())
+            arquivo, num_linha, codigo_original = extrair_info_linha(linha_strip)
             if not arquivo:
+                linhas_ignoradas.append(f"Formato Inválido: {linha_strip}")
                 continue
 
-            codigo_para_analise = re.split(r'\s*//', codigo_original)[0].strip()
+            codigo_para_analise = codigo_original # Analisar a linha inteira
             
-            vars_encontradas_na_linha = set()
-            if variaveis_regex:
-                vars_encontradas_na_linha.update(re.findall(variaveis_regex, codigo_para_analise, re.IGNORECASE))
+            termos_encontrados_na_linha = {} # {termo: tipo}
+            for termo, tipo in termos_busca.items():
+                regex = ''
+                # Sub-rotinas são buscadas como palavras completas para evitar falsos positivos
+                if tipo == 'sub-rotina':
+                    regex = r'\b' + re.escape(termo) + r'\b'
+                # Variáveis e texto-livre podem ser parte de outra string
+                elif tipo in ['variavel', 'texto-livre']:
+                    regex = re.escape(termo)
+                
+                if regex and re.search(regex, codigo_para_analise, re.IGNORECASE):
+                    termos_encontrados_na_linha[termo] = tipo
             
-            if is_ibsric_special and re.search(r'\bIBSRIC\b', codigo_para_analise, re.IGNORECASE):
-                vars_encontradas_na_linha.add('IBSRIC')
-            
-            if not vars_encontradas_na_linha:
+            if not termos_encontrados_na_linha:
+                linhas_ignoradas.append(f"Nenhum Termo Encontrado: {linha_strip}")
                 continue
 
             chave = (arquivo, num_linha)
             if chave not in linhas_unicas:
-                linhas_unicas[chave] = {'code': codigo_original, 'vars': set()}
+                linhas_unicas[chave] = {'code': codigo_original, 'terms': {}}
             
-            linhas_unicas[chave]['vars'].update(vars_encontradas_na_linha)
+            linhas_unicas[chave]['terms'].update(termos_encontrados_na_linha)
 
     print(f"  - {len(linhas_unicas)} linhas de código únicas encontradas para análise.")
+    print(f"  - {len(linhas_ignoradas)} linhas ignoradas (formato inválido ou sem termos).")
+
+    # Salvar o relatório de linhas ignoradas
+    if linhas_ignoradas:
+        try:
+            with open('analise_linhas_ignoradas.txt', 'w', encoding='utf-8') as f:
+                for linha in sorted(linhas_ignoradas):
+                    f.write(f"{linha}\n")
+            print("Arquivo com linhas ignoradas salvo em: analise_linhas_ignoradas.txt")
+        except Exception as e:
+            print(f"ERRO ao salvar o arquivo de linhas ignoradas: {e}")
 
     # Etapa 2: Classificar cada linha de código única
     print("Etapa 2: Classificando cada linha...")
@@ -356,36 +405,45 @@ def main():
 
     for (arquivo, num_linha), data in linhas_unicas.items():
         codigo_original = data['code']
-        variaveis_encontradas = data['vars']
-        codigo_para_analise = re.split(r'\s*//', codigo_original)[0].strip()
-        variaveis_str = ", ".join(sorted(list(variaveis_encontradas)))
+        termos_encontrados = data['terms'] # É um dict {termo: tipo}
+        codigo_para_analise = codigo_original # Usar a linha inteira para análise
+        
+        # Constrói a string de variáveis para o relatório
+        variaveis_str = ", ".join(sorted(termos_encontrados.keys()))
         foi_classificada = False
 
-        # 2.1. Descarte por tipo de arquivo
-        classificacao = classificar_arquivo(arquivo)
-        if classificacao in ['Não Oficiais', 'Scripts']:
-            motivo = "Rotina de Script" if classificacao == 'Scripts' else "Rotina Não Oficial"
+        # Descarte por tipo de arquivo (não oficial, script)
+        classificacao_arquivo = classificar_arquivo(arquivo)
+        if classificacao_arquivo in ['Não Oficiais', 'Scripts']:
+            motivo = "Rotina de Script" if classificacao_arquivo == 'Scripts' else "Rotina Não Oficial"
             resultados_descartados.append({
                 "Arquivo": arquivo, "Linha": num_linha, "Variável": variaveis_str,
                 "Regra de Descarte": motivo, "Código": codigo_original
             })
             continue
 
-        # 2.2. Caso Especial: IBSRIC
-        if is_ibsric_special and 'IBSRIC' in variaveis_encontradas:
-            is_comment_or_literal = re.search(r'^\s*(;.*|//.*|#;.*|rem\s)|".*\bIBSRIC\b.*"', codigo_para_analise, re.IGNORECASE)
-            if not is_comment_or_literal:
+        # Separa os termos encontrados por tipo para aplicar lógicas distintas
+        vars_na_linha = [t for t, tipo in termos_encontrados.items() if tipo == 'variavel']
+        subs_na_linha = [t for t, tipo in termos_encontrados.items() if tipo == 'sub-rotina']
+
+        # 1. Lógica para Sub-rotinas (maior prioridade)
+        if subs_na_linha:
+            # Não descarta se for comentário literal, mas a regra de descarte geral fará isso
+            is_comment_line = re.match(r"^\s*(;.*|#;.*|rem\s)", codigo_para_analise, re.IGNORECASE)
+            if not is_comment_line:
                 resultados_ajustes.append({
                     "Arquivo": arquivo, "Linha": num_linha, "Variável": variaveis_str,
-                    "Categoria": "CHAMADA_IBSRIC", "Padrão": "Chamada de Sub-rotina IBSRIC",
-                    "Justificativa": "Chamada à sub-rotina para escopo de teste.", "Código": codigo_original
+                    "Categoria": "CHAMADA_SUBROTINA", "Padrão": "Chamada de Sub-rotina",
+                    "Justificativa": f"Chamada à(s) sub-rotina(s): {', '.join(sorted(subs_na_linha))}.", 
+                    "Código": codigo_original
                 })
-                continue
-
-        # 2.3. Regras de Ajuste Crítico
-        vars_sem_ibsric = [v for v in variaveis_encontradas if v != 'IBSRIC']
-        if vars_sem_ibsric:
-            vars_regex_linha = r'\b(' + '|'.join(re.escape(v) for v in vars_sem_ibsric) + r')\b'
+                foi_classificada = True
+        
+        # 2. Lógica para Variáveis (se houver e não tiver sido classificada como sub-rotina)
+        if vars_na_linha and not foi_classificada:
+            vars_regex_linha = r'\b(' + '|'.join(re.escape(v) for v in vars_na_linha) + r')\b'
+            
+            # 2.1 Aplica regras de AJUSTE CRÍTICO
             for nome, regex, categoria, just in REGRAS_AJUSTE_CRITICO:
                 regex_com_vars = regex.replace('VARIAVEL', vars_regex_linha)
                 if re.search(regex_com_vars, codigo_para_analise, re.IGNORECASE):
@@ -395,28 +453,32 @@ def main():
                     })
                     foi_classificada = True
                     break
-        if foi_classificada: continue
+            if foi_classificada: continue
 
-        # 2.4. Regras de Descarte de Alta Confiança
-        if vars_sem_ibsric:
-            vars_regex_linha = r'\b(' + '|'.join(re.escape(v) for v in vars_sem_ibsric) + r')\b'
+            # 2.2 Aplica regras de DESCARTE
             for motivo, regex in REGRAS_DESCARTE_CONFIANCA:
                 regex_com_vars = regex.replace('VARIAVEL', vars_regex_linha)
                 if re.search(regex_com_vars, codigo_para_analise, re.IGNORECASE):
+                    # Exceção: Não descartar se for um comentário que deve ser revisado
+                    if motivo == "Comentário" and re.search(r"S|SET|I|IF|D|DO|K|KILL", codigo_para_analise, re.IGNORECASE):
+                        continue
+
                     resultados_descartados.append({
                         "Arquivo": arquivo, "Linha": num_linha, "Variável": variaveis_str,
                         "Regra de Descarte": motivo, "Código": codigo_original
                     })
                     foi_classificada = True
                     break
-        if foi_classificada: continue
+            if foi_classificada: continue
 
-        # 2.5. Padrão: Se chegou aqui e não é só IBSRIC, é revisão manual
-        if vars_sem_ibsric:
+        # 3. Padrão: Se chegou aqui, é revisão manual
+        # Cobre casos de texto-livre e variáveis que não se encaixam em nenhuma regra
+        if not foi_classificada:
+            justificativa = "Termo de texto-livre encontrado." if not vars_na_linha else "Não corresponde a nenhum padrão de ajuste ou descarte conhecido."
             resultados_ajustes.append({
                 "Arquivo": arquivo, "Linha": num_linha, "Variável": variaveis_str,
                 "Categoria": "REVISAO_MANUAL", "Padrão": "Revisão Manual Necessária", 
-                "Justificativa": "Não corresponde a nenhum padrão de ajuste ou descarte conhecido.",
+                "Justificativa": justificativa,
                 "Código": codigo_original
             })
 
@@ -439,6 +501,7 @@ def main():
         colunas_ajustes[4] = 'Localizador'
         salvar_excel(df_ajustes, ARQUIVO_SAIDA_AJUSTES, colunas_ajustes)
         gerar_relatorio_precificacao_realista(df_ajustes)
+        gerar_relatorio_resumo(df_ajustes, ARQUIVO_SAIDA_RESUMO)
 
     # Gerar Relatório de Descartes
     if resultados_descartados:
