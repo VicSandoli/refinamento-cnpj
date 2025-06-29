@@ -13,6 +13,7 @@ ARQUIVO_SAIDA_AJUSTES = 'analise_ajustes_criticos.xlsx'
 ARQUIVO_SAIDA_DESCARTES = 'analise_descartes.xlsx'
 ARQUIVO_SAIDA_DESCARTES_OFICIAIS = 'analise_descartes_oficiais.xlsx'
 ARQUIVO_SAIDA_PRECIFICACAO = 'analise_precificacao_proposta.xlsx'
+ARQUIVO_SAIDA_DESCARTES_EXTRACAO = 'analise_descartes_extracao_simples.xlsx'
 
 # 3. Arquivo com as variáveis a serem analisadas
 ARQUIVO_VARIAVEIS = 'CNPJ 1.csv'
@@ -38,12 +39,6 @@ CATEGORIAS_AJUSTE = {
         "esforco_base": 120, "esforco_testes": 48,
         "observacao": "Análise caso a caso, reengenharia e testes específicos"
     },
-    "INTEGRACAO_EXTERNA": {
-        "nome": "Integrações Externas",
-        "descricao": "Interfaces com sistemas externos - análise de compatibilidade",
-        "esforco_base": 50, "esforco_testes": 40,
-        "observacao": "Verificação de compatibilidade, adaptação e testes de integração"
-    },
     "ESTRUTURA_DADOS": {
         "nome": "Estrutura de Dados",
         "descricao": "Ajustes em banco de dados, índices e consultas",
@@ -62,6 +57,8 @@ CATEGORIAS_AJUSTE = {
 # Se uma linha corresponder a qualquer uma destas regras, será descartada.
 REGRAS_DESCARTE_CONFIANCA = [
     ("Comentário", r"^\s*(;.*|//.*|#;.*|rem\s)"),
+    # Movida para cima para ter prioridade sobre regras mais genéricas
+    ("Extração Simples de Substring", r"(\$E|\$EXTRACT)\s*\(\s*\bVARIAVEL\b"),
     ("String Literal", r'".*\bVARIAVEL\b.*"'),
     # Regra aprimorada para ser mais específica e evitar descartar atribuições que usam a variável
     ("Atribuição Simples (de variável)", r"^\s*(S|Set)\s+\w+\s*=\s*\bVARIAVEL\b\s*($|;|,|!)"),
@@ -106,8 +103,8 @@ REGRAS_AJUSTE_CRITICO = [
         "Técnica de padding com soma para ordenação/comparação - incompatível com alfanumérico."
     ),
     (
-        "Extração de Substring ($E, $EXTRACT)", r"(\$E|\$EXTRACT)\s*\(\s*\bVARIAVEL\b", "LOGICA_NEGOCIO",
-        "Extração de partes do CNPJ (raiz, filial) - a lógica pode precisar de revisão."
+        "Extração com Lógica Numérica ($E, $EXTRACT)", r"(\$E|\$EXTRACT)\s*\((?=[^)]*\+)[^)]*\bVARIAVEL\b[^)]*\)", "LOGICA_NEGOCIO",
+        "Extração de substring combinada com soma, indicando manipulação numérica."
     ),
     (
         "Parsing com $PIECE", r"\$P(IECE)?\s*\(\s*\bVARIAVEL\b", "LOGICA_NEGOCIO",
@@ -118,10 +115,10 @@ REGRAS_AJUSTE_CRITICO = [
         "Formatação Manual para Exibição", r"(\bVARIAVEL\b\s*_\s*""[\.\/\-]"")|W(RITE)?\s+.*\bVARIAVEL\b", "FORMATACAO_EXIBICAO",
         "Formatação manual para exibição - deve ser substituída por função central."
     ),
-    # --- INTEGRAÇÃO EXTERNA ---
+    # --- INTEGRAÇÃO E REVISÃO MANUAL ---
     (
-        "Uso em Contexto de Integração", r"(HTTP|REST|SOAP|XML|JSON|EXPORT|IMPORT|FTP|FILE).*\bVARIAVEL\b", "INTEGRACAO_EXTERNA",
-        "Interface externa - verificar se o sistema destino suporta CNPJ alfanumérico."
+        "Uso em Contexto de Integração", r"(HTTP|REST|SOAP|XML|JSON|EXPORT|IMPORT|FTP|FILE).*\bVARIAVEL\b", "REVISAO_MANUAL",
+        "Uso em contexto de integração. Requer análise manual da compatibilidade."
     ),
     # --- ESTRUTURA DE DADOS ---
     (
@@ -132,27 +129,28 @@ REGRAS_AJUSTE_CRITICO = [
 
 
 def carregar_variaveis_alvo(caminho_csv):
-    """Carrega as variáveis de um arquivo CSV, filtrando nomes válidos."""
+    """Carrega os termos de busca de um arquivo CSV."""
     if not os.path.exists(caminho_csv):
-        print(f"ERRO: Arquivo de variáveis '{caminho_csv}' não encontrado.")
+        print(f"ERRO: Arquivo de termos '{caminho_csv}' não encontrado.")
         return []
     try:
-        df = pd.read_csv(caminho_csv, sep=';', usecols=['codigo'], encoding='utf-8', on_bad_lines='skip')
+        # Simplificado para ler uma única coluna, sem separador estrito
+        df = pd.read_csv(caminho_csv, usecols=['codigo'], encoding='utf-8', on_bad_lines='skip')
         df.dropna(subset=['codigo'], inplace=True)
-        variaveis = df['codigo'].str.strip().unique()
-        # Filtro para garantir que são nomes de variáveis válidos em Mumps
-        filtro_regex = r'^[a-zA-Z%][a-zA-Z0-9]*$'
-        variaveis_validas = {var for var in variaveis if isinstance(var, str) and re.match(filtro_regex, var)}
-        print(f"{len(variaveis_validas)} variáveis únicas e válidas carregadas de {caminho_csv}")
-        return list(variaveis_validas)
+        # Converte para string para garantir consistência
+        termos = df['codigo'].astype(str).str.strip().unique()
+        # Remove o filtro de "variável válida" para aceitar qualquer termo (ex: "14N")
+        termos_validos = {termo for termo in termos if termo}
+        print(f"{len(termos_validos)} termos de busca únicos carregados de {caminho_csv}")
+        return list(termos_validos)
     except Exception as e:
-        print(f"ERRO ao ler o arquivo de variáveis '{caminho_csv}': {e}")
+        print(f"ERRO ao ler o arquivo de termos '{caminho_csv}': {e}")
         return []
 
 
 def extrair_info_linha(linha):
     """Extrai o nome do arquivo, número da linha e o código da linha de entrada."""
-    match = re.match(r"^(.*?)\((\d+)\):\s*(.*)", linha)
+    match = re.match(r"^(.*?)\((.*?)\):\s*(.*)", linha)
     if match:
         return match.groups()
     return None, None, None
@@ -266,7 +264,7 @@ def gerar_relatorio_precificacao_realista(df_ajustes):
             pd.DataFrame(summary_executivo).to_excel(writer, sheet_name='1_Summary_Executivo', index=False)
             pd.DataFrame(summary_categorias).to_excel(writer, sheet_name='2_Estimativa_Por_Categoria', index=False)
             # Adicionar aba com detalhamento dos pontos oficiais
-            df_oficiais_detalhe = df_oficiais[['Arquivo', 'Linha', 'Categoria', 'Padrão', 'Justificativa', 'Código']]
+            df_oficiais_detalhe = df_oficiais[['Arquivo', 'Localizador', 'Categoria', 'Padrão', 'Justificativa', 'Código']]
             df_oficiais_detalhe.to_excel(writer, sheet_name='3_Detalhe_Pontos_Oficiais', index=False)
         print(f"Relatório de precificação salvo em: {ARQUIVO_SAIDA_PRECIFICACAO}")
         print(f"   -> Total Estimado: {total_geral}h | Com Buffer (20%): {round(total_geral * 1.2)}h")
@@ -283,13 +281,12 @@ def salvar_excel(df, nome_arquivo, colunas_ordem):
     df_copy = df.copy()
     df_copy['Prefixo'] = df_copy['Arquivo'].str[:3].str.upper()
     df_copy['Classificação'] = df_copy['Arquivo'].apply(classificar_arquivo)
-    df_copy['LinhaInt'] = pd.to_numeric(df_copy['Linha'])
-
-    # Ordenar para melhor visualização
+    
+    # Ordenar para melhor visualização (sem conversão numérica)
     if "Categoria" in df_copy.columns:
-        df_copy = df_copy.sort_values(by=['Classificação', 'Arquivo', 'LinhaInt'])
+        df_copy = df_copy.sort_values(by=['Classificação', 'Arquivo', 'Localizador'])
     else:
-        df_copy = df_copy.sort_values(by=['Arquivo', 'LinhaInt'])
+        df_copy = df_copy.sort_values(by=['Arquivo', 'Localizador'])
 
     colunas_presentes = df_copy.columns.tolist()
     colunas_finais = [col for col in colunas_ordem if col in colunas_presentes]
@@ -431,27 +428,37 @@ def main():
     # Gerar Relatório de Ajustes Críticos
     if resultados_ajustes:
         df_ajustes = pd.DataFrame(resultados_ajustes)
+        df_ajustes['Tipo Programa'] = df_ajustes['Arquivo'].str.split('.').str[-1]
         df_ajustes['Prefixo'] = df_ajustes['Arquivo'].str[:3].str.upper()
         df_ajustes['Classificação'] = df_ajustes['Arquivo'].apply(classificar_arquivo)
         colunas_ajustes = [
-            "Arquivo", "Prefixo", "Classificação", "Linha", "Variável",
+            "Arquivo", "Tipo Programa", "Prefixo", "Classificação", "Linha", "Variável",
             "Categoria", "Padrão", "Justificativa", "Código"
         ]
+        df_ajustes.rename(columns={'Linha': 'Localizador'}, inplace=True)
+        colunas_ajustes[4] = 'Localizador'
         salvar_excel(df_ajustes, ARQUIVO_SAIDA_AJUSTES, colunas_ajustes)
         gerar_relatorio_precificacao_realista(df_ajustes)
 
     # Gerar Relatório de Descartes
     if resultados_descartados:
         df_descartados = pd.DataFrame(resultados_descartados)
+        df_descartados['Tipo Programa'] = df_descartados['Arquivo'].str.split('.').str[-1]
         df_descartados['Prefixo'] = df_descartados['Arquivo'].str[:3].str.upper()
         df_descartados['Classificação'] = df_descartados['Arquivo'].apply(classificar_arquivo)
         colunas_descartes = [
-            "Arquivo", "Prefixo", "Classificação", "Linha",
+            "Arquivo", "Tipo Programa", "Prefixo", "Classificação", "Linha",
             "Variável", "Regra de Descarte", "Código"
         ]
+        df_descartados.rename(columns={'Linha': 'Localizador'}, inplace=True)
+        colunas_descartes[4] = 'Localizador'
         salvar_excel(df_descartados, ARQUIVO_SAIDA_DESCARTES, colunas_descartes)
         df_descartes_oficiais = df_descartados[df_descartados['Classificação'] == 'Oficiais'].copy()
         salvar_excel(df_descartes_oficiais, ARQUIVO_SAIDA_DESCARTES_OFICIAIS, colunas_descartes)
+
+        # Salvar o relatório específico de descarte por extração simples
+        df_extracao_simples = df_descartados[df_descartados['Regra de Descarte'] == 'Extração Simples de Substring'].copy()
+        salvar_excel(df_extracao_simples, ARQUIVO_SAIDA_DESCARTES_EXTRACAO, colunas_descartes)
 
 if __name__ == "__main__":
     main()
