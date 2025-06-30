@@ -88,6 +88,10 @@ CATEGORIAS_AJUSTE_CODIGO = {
 REGRAS_DESCARTE_CONFIANCA = [
     # Regra unificada para comentários que será verificada com uma exceção
     ("Comentário", r"^\s*(;+|//)"),
+    # Novas regras para descartar definições de classes (.cls) que não são código executável
+    ("Definição de Classe (Property, Parameter, etc.)", r"^\s*(Property|Parameter|Index|Method|Class|Relationship|Query|Trigger|ForeignKey)\s+"),
+    ("Definição de Mapeamento XML/Storage", r"^\s*<(Sql|Data|Storage|Index|Stream|Map|Routine)"),
+    ("Definição de Bloco XData", r"^\s*(XData|Import|Include)\s+"),
     # Movida para cima para ter prioridade sobre regras mais genéricas
     ("Extração Simples de Substring", r"(\$E|\$EXTRACT)\s*\(\s*\bVARIAVEL\b"),
     ("String Literal", r'".*\bVARIAVEL\b.*"'),

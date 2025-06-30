@@ -4,6 +4,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import os
 import re
+import subprocess
+import threading
 
 # Configuração da página
 st.set_page_config(
@@ -15,6 +17,61 @@ st.set_page_config(
 # Título principal
 st.title("📊 Dashboard - Análise de Impacto CNPJ Alfanumérico")
 st.markdown("### Visão Estratégica para Precificação da Proposta")
+
+# --- CONTROLE DE EXECUÇÃO NA SIDEBAR ---
+st.sidebar.title("⚙️ Controles")
+
+if st.sidebar.button("Executar Nova Análise", type="primary"):
+    st.session_state.run_analysis = True
+    st.session_state.analysis_output = ""
+    st.session_state.analysis_done = False
+
+if 'run_analysis' in st.session_state and st.session_state.run_analysis:
+    st.sidebar.info("Análise em andamento...")
+    output_placeholder = st.sidebar.empty()
+    
+    # Usando st.spinner para uma melhor UX
+    with st.spinner('Executando main.py... Por favor, aguarde.'):
+        try:
+            # Comando para executar o script. '-u' para unbuffered output.
+            process = subprocess.Popen(
+                ['python', '-u', 'main.py'],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                encoding='utf-8',
+                text=True
+            )
+
+            log_output = ""
+            for line in iter(process.stdout.readline, ''):
+                log_output += line
+                output_placeholder.code(log_output, language='log')
+            
+            process.stdout.close()
+            return_code = process.wait()
+
+            if return_code == 0:
+                st.session_state.analysis_output = log_output + "\n\n✅ Análise concluída com sucesso!"
+                st.toast("Análise finalizada! Os dados foram atualizados.", icon="🎉")
+            else:
+                st.session_state.analysis_output = log_output + f"\n\n❌ ERRO: A análise falhou com código de saída {return_code}."
+                st.toast("Ocorreu um erro durante a análise.", icon="🔥")
+
+        except Exception as e:
+            st.session_state.analysis_output = f"❌ FALHA CRÍTICA ao executar o script: {e}"
+            st.toast("Falha crítica ao tentar executar o script.", icon="🚨")
+
+    st.session_state.run_analysis = False
+    st.session_state.analysis_done = True
+    st.cache_data.clear() # Limpa o cache para forçar o recarregamento dos dados
+    st.experimental_rerun() # Força o rerun do script do dashboard
+
+if 'analysis_done' in st.session_state and st.session_state.analysis_done:
+    st.sidebar.code(st.session_state.analysis_output, language='log')
+    if st.sidebar.button("Limpar Log"):
+        st.session_state.analysis_done = False
+        st.session_state.analysis_output = ""
+        st.experimental_rerun()
 
 # Configuração de arquivos
 ARQUIVO_AJUSTES = 'analise_ajustes_criticos.xlsx'
@@ -308,12 +365,14 @@ elif pagina == "🔍 Explorador de Pontos Críticos":
             variaveis = str(row['Variável']).split(', ')
             for var in variaveis:
                 # Usar re.escape para tratar caracteres especiais nas variáveis
-                codigo = re.sub(f'({re.escape(var)})', r'**:red[\1]**', codigo, flags=re.IGNORECASE)
+                codigo = re.sub(f'({re.escape(var)})', r'**:red[\\1]**', codigo, flags=re.IGNORECASE)
             return codigo
 
         # Aplicar o destaque
         if not df_filtrado.empty:
-            df_filtrado['Código'] = df_filtrado.apply(destacar_variaveis, axis=1)
+            # Criar uma cópia explícita aqui para evitar o SettingWithCopyWarning
+            df_filtrado = df_filtrado.copy()
+            df_filtrado.loc[:, 'Código'] = df_filtrado.apply(destacar_variaveis, axis=1)
         
         st.dataframe(df_filtrado, use_container_width=True)
         st.info(f"Exibindo {len(df_filtrado)} de {len(df_ajustes)} pontos críticos.")
@@ -327,13 +386,12 @@ st.markdown("📊 **Dashboard de Análise CNPJ Alfanumérico** | Desenvolvido pa
 
 # Instruções de uso na sidebar
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 📖 Como usar:")
+st.sidebar.title("📖 Como usar")
 st.sidebar.markdown("""
-1. **Execute primeiro:** `python main.py`
-2. **Inicie o dashboard:** `streamlit run dashboard.py`
-3. **Navegue pelas abas** para diferentes visões
-4. **Use os filtros** para análises específicas
-5. **Baixe os dados** conforme necessário
+1.  **Clique em 'Executar Nova Análise'** para gerar os dados mais recentes a partir do código-fonte.
+2.  **Aguarde a execução terminar.** O log aparecerá na barra lateral.
+3.  **Navegue pelas abas** para explorar os resultados.
+4.  **Use os filtros no Explorador** para análises detalhadas.
 """)
 
 # Informações técnicas na sidebar

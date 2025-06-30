@@ -40,7 +40,6 @@ IBSRIC;sub-rotina
 1N.N;texto-livre
 xCCLI;variavel
 XCCLI;variavel
-CLIENTE;variavel
 Codigo_Cliente;variavel
-000;texto-livre
+0;texto-livre
 CCLIP;variavel
