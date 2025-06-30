@@ -25,74 +25,61 @@ ARQUIVO_TERMOS = 'CNPJ 1.csv'
 ATIVIDADES_BASE_PROJETO = {
     "GERENCIAMENTO_PROJETO": {
         "nome": "Gerenciamento e Planejamento",
-        "esforco_dev": 80, "esforco_testes": 0,
-        "descricao": "Coordenação do projeto, reuniões, planejamento de sprints e acompanhamento das entregas."
+        "esforco_dev": 120, "esforco_testes": 0,
+        "descricao": "Coordenação, planejamento e acompanhamento das entregas do projeto."
     },
-    "ANALISE_DETALHADA": {
-        "nome": "Análise de Requisitos e Arquitetura da Solução",
-        "esforco_dev": 60, "esforco_testes": 0,
-        "descricao": "Análise detalhada do novo cálculo de DV, regras de negócio, e definição da arquitetura da solução central."
+    "ANALISE_ARQUITETURA": {
+        "nome": "Análise e Arquitetura da Solução (Especificação funcional)",
+        "esforco_dev": 160, "esforco_testes": 0,
+        "descricao": "Definição da arquitetura da solução, especificação funcional e detalhamento das regras de negócio para o CNPJ alfanumérico."
+    },
+    "ANALISE_PONTOS_CRITICOS": {
+        "nome": "Análise preliminar para identificação de pontos a serem ajustados",
+        "esforco_dev": 210, "esforco_testes": 0,
+        "descricao": "Análise em bloco de todos os pontos de código impactados para categorização e definição das estratégias de refatoração."
     },
     "SOLUCAO_CENTRAL": {
-        "nome": "Desenvolvimento da Solução Central",
-        "esforco_dev": 120, "esforco_testes": 40,
-        "descricao": "Criação e testes das funções centrais de validação, formatação e cálculo de DV para o CNPJ alfanumérico."
+        "nome": "Desenvolvimento da Solução Central para tratamento de código",
+        "esforco_dev": 80, "esforco_testes": 40,
+        "descricao": "Criação e testes unitários das funções centrais de validação, formatação e cálculo de DV."
     },
-    "ATUALIZACAO_DOCUMENTACAO": {
-        "nome": "Atualização de Documentação Técnica e Manuais",
-        "esforco_dev": 40, "esforco_testes": 0,
-        "descricao": "Revisão e atualização de manuais técnicos, schemas (XML, etc.), e documentação de APIs."
+    "REFATORACAO_ROTINAS": {
+        "nome": "Refatoração e ajustes de rotinas identificadas",
+        "esforco_dev": 560, "esforco_testes": 240,
+        "descricao": "Refatoração de todas as rotinas e pontos de código impactados, aplicando a solução central."
     },
-    "MIGRACAO_CODIGO_BARRAS": {
-        "nome": "Análise e Migração do Código de Barras",
-        "esforco_dev": 24, "esforco_testes": 8,
-        "descricao": "Análise do impacto e implementação da migração do padrão de código de barras de CODE-128C para CODE-128A."
+    "AJUSTE_SUBROTINA_IBSRIC": {
+        "nome": "Ajustes de subrotinas de validação (IBSRIC)",
+        "esforco_dev": 40, "esforco_testes": 20,
+        "descricao": "Refatoração específica do conjunto de sub-rotinas de validação (IBSRIC) para utilizar a nova solução central."
     },
-    "HOMOLOGACAO_TESTES_FINAIS": {
-        "nome": "Fase de Homologação e Testes Integrados",
-        "esforco_dev": 80, "esforco_testes": 160,
-        "descricao": "Ciclo completo de testes de homologação (UAT), testes de regressão e preparação do ambiente de produção."
+    "AJUSTE_CODIGO_BARRAS": {
+        "nome": "Ajustes de código de barras do DANFE",
+        "esforco_dev": 60, "esforco_testes": 20,
+        "descricao": "Implementação da migração do padrão de código de barras de CODE-128C para CODE-128A."
+    },
+    "AJUSTE_CHAVE_NFE": {
+        "nome": "Ajustes de chave de acesso NFe",
+        "esforco_dev": 100, "esforco_testes": 40,
+        "descricao": "Ajuste na lógica de geração e validação da chave de acesso de Documentos Fiscais Eletrônicos."
+    },
+    "TESTES_IMPLANTACAO": {
+        "nome": "Testes Finais e Implantação (Homologação e Go-Live)",
+        "esforco_dev": 80, "esforco_testes": 100,
+        "descricao": "Ciclo completo de testes integrados, suporte à homologação (UAT), apoio ao go-live e atividades de implantação em produção."
     }
 }
 
 # --- CATEGORIAS PARA AJUSTE DE CÓDIGO ---
-# Mantidas para gerar a estimativa de esforço de refatoração.
+# Custo marginal por ponto de código, representando o esforço mecânico de substituição.
+# Esta seção é mantida para a classificação dos pontos no relatório de detalhamento, mas não é mais usada para o cálculo do esforço.
 CATEGORIAS_AJUSTE_CODIGO = {
-    "VALIDACAO_ENTRADA": {
-        "nome": "Validação e Entrada de Dados",
-        "descricao": "Pontos que validam entrada de CNPJ - serão ajustados para usar função central",
-        "esforco_base": 56, "esforco_testes": 22,
-        "observacao": "Implementação de função central + ajustes pontuais"
-    },
-    "FORMATACAO_EXIBICAO": {
-        "nome": "Formatação e Exibição",
-        "descricao": "Pontos que formatam CNPJ para exibição - usarão função central",
-        "esforco_base": 30, "esforco_testes": 10,
-        "observacao": "Substituição por chamadas à função central"
-    },
-    "LOGICA_NEGOCIO": {
-        "nome": "Lógica de Negócio Específica",
-        "descricao": "Pontos com lógica específica que precisam revisão manual",
-        "esforco_base": 120, "esforco_testes": 48,
-        "observacao": "Análise caso a caso, reengenharia e testes específicos"
-    },
-    "CHAMADA_SUBROTINA": {
-        "nome": "Chamada de Sub-rotina",
-        "descricao": "Pontos que chamam sub-rotinas relacionadas, precisam de análise de impacto.",
-        "esforco_base": 40, "esforco_testes": 16,
-        "observacao": "Análise do fluxo de dados de entrada e saída da sub-rotina."
-    },
-    "ESTRUTURA_DADOS": {
-        "nome": "Estrutura de Dados",
-        "descricao": "Ajustes em banco de dados, índices e consultas",
-        "esforco_base": 24, "esforco_testes": 12,
-        "observacao": "Revisão de tipos de dados, índices, performance e migração"
-    },
-    "REVISAO_MANUAL": {
-        "nome": "Revisão Manual Necessária",
-        "descricao": "Linhas que não se encaixam em padrões conhecidos e exigem análise",
-        "esforco_base": 2, "esforco_testes": 1, # Custo por ponto
-        "observacao": "Análise manual para determinar a categoria correta e o impacto"
+    "REFATORACAO_PONTUAL": {
+        "nome": "Refatoração e ajustes de rotinas identificadas",
+        "descricao": "Substituição do código legado por chamadas à nova solução central.",
+        "esforco_dev_por_ponto": 0.0,  # Não utilizado para cálculo
+        "esforco_testes_por_ponto": 0.0, # Não utilizado para cálculo
+        "observacao": "Custo agora definido como um bloco fixo em ATIVIDADES_BASE_PROJETO."
     }
 }
 
@@ -130,43 +117,43 @@ REGRAS_DESCARTE_CONFIANCA = [
 REGRAS_AJUSTE_CRITICO = [
     # --- VALIDAÇÃO E ENTRADA ---
     (
-        "Máscara Numérica Explícita", r"\?\d*N", "VALIDACAO_ENTRADA",
+        "Máscara Numérica Explícita", r"\?\d*N", "REFATORACAO_PONTUAL",
         "Máscara que força entrada numérica - precisa aceitar alfanumérico."
     ),
     (
-        "Validação de Comprimento", r"\$L(ENGTH)?\s*\(\s*\bVARIAVEL\b.*\)\s*[=<>]\s*(11|14)", "VALIDACAO_ENTRADA",
+        "Validação de Comprimento", r"\$L(ENGTH)?\s*\(\s*\bVARIAVEL\b.*\)\s*[=<>]\s*(11|14)", "REFATORACAO_PONTUAL",
         "Validação de tamanho fixo - precisa ser flexibilizada."
     ),
     (
-        "Conversão/Operação Numérica", r"(\$NUMBER|\$ZSTRIP)\s*\(\s*\bVARIAVEL\b|\bVARIAVEL\b\s*[\+\-\*\/]\s*\d+|\d+\s*[\+\-\*\/]\s*\bVARIAVEL\b", "VALIDACAO_ENTRADA",
+        "Conversão/Operação Numérica", r"(\$NUMBER|\$ZSTRIP)\s*\(\s*\bVARIAVEL\b|\bVARIAVEL\b\s*[\+\-\*\/]\s*\d+|\d+\s*[\+\-\*\/]\s*\bVARIAVEL\b", "REFATORACAO_PONTUAL",
         "Conversão para número ou operação aritmética - falhará com alfanumérico."
     ),
     # --- LÓGICA DE NEGÓCIO ---
     (
-        "Padding com Soma", r"(1000000\d{6,}\s*\+\s*\bVARIAVEL\b|\bVARIAVEL\b\s*\+\s*1000000\d{6,})", "LOGICA_NEGOCIO",
+        "Padding com Soma", r"(1000000\d{6,}\s*\+\s*\bVARIAVEL\b|\bVARIAVEL\b\s*\+\s*1000000\d{6,})", "REFATORACAO_PONTUAL",
         "Técnica de padding com soma para ordenação/comparação - incompatível com alfanumérico."
     ),
     (
-        "Extração com Lógica Numérica ($E, $EXTRACT)", r"(\$E|\$EXTRACT)\s*\((?=[^)]*\+)[^)]*\bVARIAVEL\b[^)]*\)", "LOGICA_NEGOCIO",
+        "Extração com Lógica Numérica ($E, $EXTRACT)", r"(\$E|\$EXTRACT)\s*\((?=[^)]*\+)[^)]*\bVARIAVEL\b[^)]*\)", "REFATORACAO_PONTUAL",
         "Extração de substring combinada com soma, indicando manipulação numérica."
     ),
     (
-        "Parsing com $PIECE", r"\$P(IECE)?\s*\(\s*\bVARIAVEL\b", "LOGICA_NEGOCIO",
+        "Parsing com $PIECE", r"\$P(IECE)?\s*\(\s*\bVARIAVEL\b", "REFATORACAO_PONTUAL",
         "Parsing da variável - pode ser afetado se o delimitador for um número."
     ),
     # --- FORMATAÇÃO E EXIBIÇÃO ---
     (
-        "Formatação Manual para Exibição", r"(\bVARIAVEL\b\s*_\s*""[\.\/\-]"")|W(RITE)?\s+.*\bVARIAVEL\b", "FORMATACAO_EXIBICAO",
+        "Formatação Manual para Exibição", r"(\bVARIAVEL\b\s*_\s*""[\.\/\-]"")|W(RITE)?\s+.*\bVARIAVEL\b", "REFATORACAO_PONTUAL",
         "Formatação manual para exibição - deve ser substituída por função central."
     ),
     # --- INTEGRAÇÃO E REVISÃO MANUAL ---
     (
-        "Uso em Contexto de Integração", r"(HTTP|REST|SOAP|XML|JSON|EXPORT|IMPORT|FTP|FILE).*\bVARIAVEL\b", "REVISAO_MANUAL",
+        "Uso em Contexto de Integração", r"(HTTP|REST|SOAP|XML|JSON|EXPORT|IMPORT|FTP|FILE).*\bVARIAVEL\b", "REFATORACAO_PONTUAL",
         "Uso em contexto de integração. Requer análise manual da compatibilidade."
     ),
     # --- ESTRUTURA DE DADOS ---
     (
-        "Uso em Operação de Banco", r"&(SQL|sql)\(.*\bVARIAVEL\b.*\)|(SELECT|INSERT|UPDATE|DELETE|WHERE|ORDER\s+BY).*\bVARIAVEL\b", "ESTRUTURA_DADOS",
+        "Uso em Operação de Banco", r"&(SQL|sql)\(.*\bVARIAVEL\b.*\)|(SELECT|INSERT|UPDATE|DELETE|WHERE|ORDER\s+BY).*\bVARIAVEL\b", "REFATORACAO_PONTUAL",
         "Operação de banco - verificar tipos de dados, índices e performance da consulta."
     ),
 ]
@@ -244,11 +231,11 @@ def analisar_ponto_critico(codigo, var_alvo):
                 return nome, categoria, just, regex_var
 
     # Se nenhuma regra crítica corresponder, classifica para revisão manual
-    return "Revisão Manual Necessária", "REVISAO_MANUAL", "Não corresponde a nenhum padrão de ajuste ou descarte conhecido.", "N/A"
+    return "Revisão Manual Necessária", "REFATORACAO_PONTUAL", "Não corresponde a nenhum padrão de ajuste ou descarte conhecido.", "N/A"
 
 
 def gerar_relatorio_precificacao_realista(df_ajustes):
-    """Gera relatório de precificação realista baseado nas atividades base e nos ajustes de código."""
+    """Gera relatório de precificação realista baseado em blocos de trabalho com esforço fixo."""
 
     # --- INÍCIO DA LÓGICA DE CÁLCULO ---
     total_dev = 0
@@ -263,7 +250,7 @@ def gerar_relatorio_precificacao_realista(df_ajustes):
         total_testes += esforco_testes
         summary_atividades.append({
             "Frente de Trabalho": config["nome"],
-            "Tipo": "Atividade Base",
+            "Tipo": "Frente de Trabalho",
             "Pontos Identificados": "N/A",
             "Esforço Dev (h)": esforco_dev,
             "Esforço Testes (h)": esforco_testes,
@@ -271,45 +258,18 @@ def gerar_relatorio_precificacao_realista(df_ajustes):
             "Observação": config["descricao"],
         })
 
-    # 2. Calcular esforço para Ajustes de Código (somente rotinas oficiais)
+    # Apenas para fins de relatório, contamos os pontos oficiais
     df_oficiais = pd.DataFrame()
     if not df_ajustes.empty:
         df_oficiais = df_ajustes[df_ajustes['Classificação'] == 'Oficiais'].copy()
     
-    print(f"\n📊 Análise de Esforço de CÓDIGO focada em ROTINAS OFICIAIS: {len(df_oficiais)} pontos de {len(df_ajustes)} totais.")
-
-    if not df_oficiais.empty:
-        contagem_categorias = df_oficiais['Categoria'].value_counts()
-        for categoria_id, config in CATEGORIAS_AJUSTE_CODIGO.items():
-            pontos = contagem_categorias.get(categoria_id, 0)
-            if pontos > 0:
-                if categoria_id == "REVISAO_MANUAL":
-                    esforco_dev = config["esforco_base"] * pontos
-                    esforco_testes = config["esforco_testes"] * pontos
-                else:
-                    fator_pontos = 1 + (pontos - 1) * 0.05
-                    esforco_dev = round(config["esforco_base"] * fator_pontos)
-                    esforco_testes = round(config["esforco_testes"] * fator_pontos)
-
-                total_dev += esforco_dev
-                total_testes += esforco_testes
-                summary_atividades.append({
-                    "Frente de Trabalho": config["nome"],
-                    "Tipo": "Ajuste de Código",
-                    "Pontos Identificados": pontos,
-                    "Esforço Dev (h)": esforco_dev,
-                    "Esforço Testes (h)": esforco_testes,
-                    "Total (h)": esforco_dev + esforco_testes,
-                    "Observação": config["observacao"],
-                })
-
     # 3. Gerar Sumário Executivo
     total_geral = total_dev + total_testes
     summary_executivo = [
         {"Métrica": "Esforço Desenvolvimento", "Valor": f"{total_dev}h"},
         {"Métrica": "Esforço Testes QA", "Valor": f"{total_testes}h"},
         {"Métrica": "Total Estimado", "Valor": f"{total_geral}h"},
-        {"Métrica": "Estimativa com Buffer (20%)", "Valor": f"{round(total_geral * 1.2)}h"},
+        {"Métrica": "Estimativa com Buffer (15%)", "Valor": f"{round(total_geral * 1.15)}h"},
         {"Métrica": "Pontos Críticos (Oficiais)", "Valor": len(df_oficiais)},
         {"Métrica": "Rotinas Oficiais Impactadas", "Valor": df_oficiais['Arquivo'].nunique() if not df_oficiais.empty else 0},
     ]
@@ -324,7 +284,7 @@ def gerar_relatorio_precificacao_realista(df_ajustes):
                 df_oficiais_detalhe = df_oficiais[['Arquivo', 'Localizador', 'Categoria', 'Padrão', 'Justificativa', 'Código']]
                 df_oficiais_detalhe.to_excel(writer, sheet_name='3_Detalhe_Pontos_Oficiais', index=False)
         print(f"Relatório de precificação salvo em: {ARQUIVO_SAIDA_PRECIFICACAO}")
-        print(f"   -> Total Estimado: {total_geral}h | Com Buffer (20%): {round(total_geral * 1.2)}h")
+        print(f"   -> Total Estimado: {round(total_geral)}h | Com Buffer (15%): {round(total_geral * 1.15)}h")
     except Exception as e:
         print(f"ERRO ao salvar relatório de precificação: {e}")
 
@@ -530,7 +490,7 @@ def main():
             justificativa = "Termo de texto-livre encontrado." if not vars_na_linha else "Não corresponde a nenhum padrão de ajuste ou descarte conhecido."
             resultados_ajustes.append({
                 "Arquivo": arquivo, "Linha": num_linha, "Variável": variaveis_str,
-                "Categoria": "REVISAO_MANUAL", "Padrão": "Revisão Manual Necessária", 
+                "Categoria": "REFATORACAO_PONTUAL", "Padrão": "Revisão Manual Necessária", 
                 "Justificativa": justificativa,
                 "Código": codigo_original
             })
