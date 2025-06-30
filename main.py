@@ -95,10 +95,13 @@ REGRAS_DESCARTE_CONFIANCA = [
     # Movida para cima para ter prioridade sobre regras mais genéricas
     ("Extração Simples de Substring", r"(\$E|\$EXTRACT)\s*\(\s*\bVARIAVEL\b"),
     ("String Literal", r'".*\bVARIAVEL\b.*"'),
+    # Novas regras para descartar usos simples em SQL que não representam risco
+    ("Uso como Alias em SQL", r"\bAS\s+'?\bVARIAVEL\b'?,?"),
+    ("Comparação Simples em SQL", r"(WHERE|ON)\s+.*\s*\bVARIAVEL\b\s*(=|LIKE)\s*.*|SET\s+.*\s*\bVARIAVEL\b\s*="),
     # Regra aprimorada para ser mais específica e evitar descartar atribuições que usam a variável
     ("Atribuição Simples (de variável)", r"^\s*(S|Set)\s+\w+\s*=\s*\bVARIAVEL\b\s*($|;|,|!)"),
-    # Regra aprimorada para permitir propriedades de objeto (ponto) e variáveis com '%'
-    ("Atribuição Simples (para variável)", r"^\s*(S|Set)\s+\bVARIAVEL\b\s*=\s*[%.\w]+\s*($|;|,|!)"),
+    # Regra aprimorada para permitir atribuições complexas (com funções, métodos, etc.)
+    ("Atribuição Simples (para variável)", r"^\s*(S|Set)\s+\bVARIAVEL\b\s*=\s*.*($|;|,|!)"),
     # Regra expandida para cobrir atribuições em lista, como S ALT=0,CCLI=""
     ("Set para Vazio", r'^\s*(S|Set)\s+.*\bVARIAVEL\b\s*=\s*""|,\s*\bVARIAVEL\b\s*=\s*""'),
     # Nova regra, focada apenas na comparação
