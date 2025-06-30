@@ -103,11 +103,11 @@ REGRAS_DESCARTE_CONFIANCA = [
     # Regra aprimorada para permitir atribuições complexas (com funções, métodos, etc.)
     ("Atribuição Simples (para variável)", r"^\s*(S|Set)\s+\bVARIAVEL\b\s*=\s*.*($|;|,|!)"),
     # Regra expandida para cobrir atribuições em lista, como S ALT=0,CCLI=""
-    ("Set para Vazio", r'^\s*(S|Set)\s+.*\bVARIAVEL\b\s*=\s*""|,\s*\bVARIAVEL\b\s*=\s*""'),
+    ('Set para Vazio', r'^\s*(S|Set)\s+.*\bVARIAVEL\b\s*=\s*""|,\s*\bVARIAVEL\b\s*=\s*""'),
     # Nova regra, focada apenas na comparação
-    ("Comparação com Vazio", r"if\s+'?\bVARIAVEL\b'?\s*=\s*"""),
+    ("Comparação com Vazio", r"if\s+'?\bVARIAVEL\b'?\s*=\s*\"\""),
     # Nova regra para comparação com strings fixas
-    ("Comparação com String Fixa", r"^\s*(I|If)\s+'?\bVARIAVEL\b'?\s*=\s*"".*"""),
+    ('Comparação com String Fixa', r'^\s*(I|If)\s+\'?\bVARIAVEL\b\'?\s*=\s*".*"'),
     ("Uso como Parâmetro Simples", r"(\(|,)\s*\bVARIAVEL\b\s*(\)|,)"),
     ("Parâmetro em Chamada de Método/Função", r"(##class\(|##super\(|\$\$\w+\^)\([^)]*\bVARIAVEL\b[^)]*\)"),
     ("Chamada de Rotina (Do)", r"^\s*Do\s+.*\^.*\bVARIAVEL\b"),
@@ -150,7 +150,7 @@ REGRAS_AJUSTE_CRITICO = [
     ),
     # --- FORMATAÇÃO E EXIBIÇÃO ---
     (
-        "Formatação Manual para Exibição", r"(\bVARIAVEL\b\s*_\s*""[\.\/\-]"")|W(RITE)?\s+.*\bVARIAVEL\b", "REFATORACAO_PONTUAL",
+        "Formatação Manual para Exibição", r'(\bVARIAVEL\b\s*_\s*""[\\.\\/\\-]"")|W(RITE)?\s+.*\bVARIAVEL\b', "REFATORACAO_PONTUAL",
         "Formatação manual para exibição - deve ser substituída por função central."
     ),
     # --- INTEGRAÇÃO E REVISÃO MANUAL ---

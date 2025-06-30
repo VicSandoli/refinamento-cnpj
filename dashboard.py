@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import threading
+import sys
 
 # Configuração da página
 st.set_page_config(
@@ -38,8 +39,9 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
             env['PYTHONIOENCODING'] = 'UTF-8'
 
             # Comando para executar o script. '-u' para unbuffered output.
+            # Usar sys.executable garante que o subprocesso use o mesmo ambiente Python que o Streamlit.
             process = subprocess.Popen(
-                ['python', '-u', 'main.py'],
+                [sys.executable, '-u', 'main.py'],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 encoding='utf-8',
