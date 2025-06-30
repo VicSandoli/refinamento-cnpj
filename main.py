@@ -19,9 +19,45 @@ ARQUIVO_SAIDA_RESUMO = 'analise_resumo_criticos_oficiais.xlsx'
 # 3. Arquivo com os termos de busca a serem analisados
 ARQUIVO_TERMOS = 'CNPJ 1.csv'
 
-# --- CATEGORIAS PARA PRECIFICAÇÃO REALISTA ---
-# Mantidas para gerar a estimativa de esforço final.
-CATEGORIAS_AJUSTE = {
+# --- ATIVIDADES BASE DO PROJETO ---
+# Esforços fixos para atividades que independem da contagem de pontos de código,
+# refletindo o escopo completo do projeto de adequação ao CNPJ alfanumérico.
+ATIVIDADES_BASE_PROJETO = {
+    "GERENCIAMENTO_PROJETO": {
+        "nome": "Gerenciamento e Planejamento",
+        "esforco_dev": 80, "esforco_testes": 0,
+        "descricao": "Coordenação do projeto, reuniões, planejamento de sprints e acompanhamento das entregas."
+    },
+    "ANALISE_DETALHADA": {
+        "nome": "Análise de Requisitos e Arquitetura da Solução",
+        "esforco_dev": 60, "esforco_testes": 0,
+        "descricao": "Análise detalhada do novo cálculo de DV, regras de negócio, e definição da arquitetura da solução central."
+    },
+    "SOLUCAO_CENTRAL": {
+        "nome": "Desenvolvimento da Solução Central",
+        "esforco_dev": 120, "esforco_testes": 40,
+        "descricao": "Criação e testes das funções centrais de validação, formatação e cálculo de DV para o CNPJ alfanumérico."
+    },
+    "ATUALIZACAO_DOCUMENTACAO": {
+        "nome": "Atualização de Documentação Técnica e Manuais",
+        "esforco_dev": 40, "esforco_testes": 0,
+        "descricao": "Revisão e atualização de manuais técnicos, schemas (XML, etc.), e documentação de APIs."
+    },
+    "MIGRACAO_CODIGO_BARRAS": {
+        "nome": "Análise e Migração do Código de Barras",
+        "esforco_dev": 24, "esforco_testes": 8,
+        "descricao": "Análise do impacto e implementação da migração do padrão de código de barras de CODE-128C para CODE-128A."
+    },
+    "HOMOLOGACAO_TESTES_FINAIS": {
+        "nome": "Fase de Homologação e Testes Integrados",
+        "esforco_dev": 80, "esforco_testes": 160,
+        "descricao": "Ciclo completo de testes de homologação (UAT), testes de regressão e preparação do ambiente de produção."
+    }
+}
+
+# --- CATEGORIAS PARA AJUSTE DE CÓDIGO ---
+# Mantidas para gerar a estimativa de esforço de refatoração.
+CATEGORIAS_AJUSTE_CODIGO = {
     "VALIDACAO_ENTRADA": {
         "nome": "Validação e Entrada de Dados",
         "descricao": "Pontos que validam entrada de CNPJ - serão ajustados para usar função central",
@@ -63,6 +99,8 @@ CATEGORIAS_AJUSTE = {
 # --- REGRAS DE DESCARTE DE ALTA CONFIANÇA ---
 # Se uma linha corresponder a qualquer uma destas regras, será descartada.
 REGRAS_DESCARTE_CONFIANCA = [
+    # Regra unificada para comentários que será verificada com uma exceção
+    ("Comentário", r"^\s*(;+|//)"),
     # Movida para cima para ter prioridade sobre regras mais genéricas
     ("Extração Simples de Substring", r"(\$E|\$EXTRACT)\s*\(\s*\bVARIAVEL\b"),
     ("String Literal", r'".*\bVARIAVEL\b.*"'),
@@ -210,72 +248,81 @@ def analisar_ponto_critico(codigo, var_alvo):
 
 
 def gerar_relatorio_precificacao_realista(df_ajustes):
-    """Gera relatório de precificação baseado nas categorias de ajuste."""
-    if df_ajustes.empty:
-        print("\nNenhum dado para gerar o relatório de precificação.")
-        return
+    """Gera relatório de precificação realista baseado nas atividades base e nos ajustes de código."""
 
-    # Focar análise apenas em rotinas oficiais
-    df_oficiais = df_ajustes[df_ajustes['Classificação'] == 'Oficiais'].copy()
-    print(f"\n📊 Análise de Esforço focada em ROTINAS OFICIAIS: {len(df_oficiais)} pontos de {len(df_ajustes)} totais.")
-    if df_oficiais.empty:
-        print("Nenhuma rotina oficial encontrada para estimativa de esforço.")
-        return
-
-    summary_categorias = []
+    # --- INÍCIO DA LÓGICA DE CÁLCULO ---
     total_dev = 0
     total_testes = 0
+    summary_atividades = []
 
-    # Agrupar por categoria para calcular o esforço
-    contagem_categorias = df_oficiais['Categoria'].value_counts()
+    # 1. Adicionar Atividades Base do Projeto
+    for _, config in ATIVIDADES_BASE_PROJETO.items():
+        esforco_dev = config["esforco_dev"]
+        esforco_testes = config["esforco_testes"]
+        total_dev += esforco_dev
+        total_testes += esforco_testes
+        summary_atividades.append({
+            "Frente de Trabalho": config["nome"],
+            "Tipo": "Atividade Base",
+            "Pontos Identificados": "N/A",
+            "Esforço Dev (h)": esforco_dev,
+            "Esforço Testes (h)": esforco_testes,
+            "Total (h)": esforco_dev + esforco_testes,
+            "Observação": config["descricao"],
+        })
 
-    for categoria_id, config in CATEGORIAS_AJUSTE.items():
-        pontos = contagem_categorias.get(categoria_id, 0)
-        if pontos > 0:
-            if categoria_id == "REVISAO_MANUAL":
-                # Custo por ponto para revisão manual
-                esforco_dev = config["esforco_base"] * pontos
-                esforco_testes = config["esforco_testes"] * pontos
-            else:
-                # Custo base da categoria + fator por pontos
-                fator_pontos = 1 + (pontos - 1) * 0.05 # Adicional de 5% por ponto extra
-                esforco_dev = round(config["esforco_base"] * fator_pontos)
-                esforco_testes = round(config["esforco_testes"] * fator_pontos)
+    # 2. Calcular esforço para Ajustes de Código (somente rotinas oficiais)
+    df_oficiais = pd.DataFrame()
+    if not df_ajustes.empty:
+        df_oficiais = df_ajustes[df_ajustes['Classificação'] == 'Oficiais'].copy()
+    
+    print(f"\n📊 Análise de Esforço de CÓDIGO focada em ROTINAS OFICIAIS: {len(df_oficiais)} pontos de {len(df_ajustes)} totais.")
 
-            total_dev += esforco_dev
-            total_testes += esforco_testes
-            summary_categorias.append({
-                "Categoria": config["nome"], "Pontos Identificados": pontos,
-                "Esforço Dev (h)": esforco_dev, "Esforço Testes (h)": esforco_testes,
-                "Total (h)": esforco_dev + esforco_testes, "Observação": config["observacao"],
-            })
+    if not df_oficiais.empty:
+        contagem_categorias = df_oficiais['Categoria'].value_counts()
+        for categoria_id, config in CATEGORIAS_AJUSTE_CODIGO.items():
+            pontos = contagem_categorias.get(categoria_id, 0)
+            if pontos > 0:
+                if categoria_id == "REVISAO_MANUAL":
+                    esforco_dev = config["esforco_base"] * pontos
+                    esforco_testes = config["esforco_testes"] * pontos
+                else:
+                    fator_pontos = 1 + (pontos - 1) * 0.05
+                    esforco_dev = round(config["esforco_base"] * fator_pontos)
+                    esforco_testes = round(config["esforco_testes"] * fator_pontos)
 
-    # Adicionar o esforço da solução central (base)
-    esforco_central = {
-        "Categoria": "Solução Central - Funções Base", "Pontos Identificados": "N/A",
-        "Esforço Dev (h)": 120, "Esforço Testes (h)": 40, "Total (h)": 160,
-        "Observação": "Desenvolvimento de funções centrais de validação e formatação.",
-    }
-    summary_categorias.insert(0, esforco_central)
-    total_dev += 120
-    total_testes += 40
+                total_dev += esforco_dev
+                total_testes += esforco_testes
+                summary_atividades.append({
+                    "Frente de Trabalho": config["nome"],
+                    "Tipo": "Ajuste de Código",
+                    "Pontos Identificados": pontos,
+                    "Esforço Dev (h)": esforco_dev,
+                    "Esforço Testes (h)": esforco_testes,
+                    "Total (h)": esforco_dev + esforco_testes,
+                    "Observação": config["observacao"],
+                })
+
+    # 3. Gerar Sumário Executivo
     total_geral = total_dev + total_testes
-
     summary_executivo = [
         {"Métrica": "Esforço Desenvolvimento", "Valor": f"{total_dev}h"},
         {"Métrica": "Esforço Testes QA", "Valor": f"{total_testes}h"},
         {"Métrica": "Total Estimado", "Valor": f"{total_geral}h"},
         {"Métrica": "Estimativa com Buffer (20%)", "Valor": f"{round(total_geral * 1.2)}h"},
         {"Métrica": "Pontos Críticos (Oficiais)", "Valor": len(df_oficiais)},
+        {"Métrica": "Rotinas Oficiais Impactadas", "Valor": df_oficiais['Arquivo'].nunique() if not df_oficiais.empty else 0},
     ]
 
+    # 4. Salvar o relatório em Excel com múltiplas abas
     try:
+        df_summary = pd.DataFrame(summary_atividades)
         with pd.ExcelWriter(ARQUIVO_SAIDA_PRECIFICACAO, engine='openpyxl') as writer:
             pd.DataFrame(summary_executivo).to_excel(writer, sheet_name='1_Summary_Executivo', index=False)
-            pd.DataFrame(summary_categorias).to_excel(writer, sheet_name='2_Estimativa_Por_Categoria', index=False)
-            # Adicionar aba com detalhamento dos pontos oficiais
-            df_oficiais_detalhe = df_oficiais[['Arquivo', 'Localizador', 'Categoria', 'Padrão', 'Justificativa', 'Código']]
-            df_oficiais_detalhe.to_excel(writer, sheet_name='3_Detalhe_Pontos_Oficiais', index=False)
+            df_summary.to_excel(writer, sheet_name='2_Estimativa_Detalhada', index=False)
+            if not df_oficiais.empty:
+                df_oficiais_detalhe = df_oficiais[['Arquivo', 'Localizador', 'Categoria', 'Padrão', 'Justificativa', 'Código']]
+                df_oficiais_detalhe.to_excel(writer, sheet_name='3_Detalhe_Pontos_Oficiais', index=False)
         print(f"Relatório de precificação salvo em: {ARQUIVO_SAIDA_PRECIFICACAO}")
         print(f"   -> Total Estimado: {total_geral}h | Com Buffer (20%): {round(total_geral * 1.2)}h")
     except Exception as e:
@@ -412,7 +459,17 @@ def main():
         variaveis_str = ", ".join(sorted(termos_encontrados.keys()))
         foi_classificada = False
 
-        # Descarte por tipo de arquivo (não oficial, script)
+        # --- LÓGICA DE CLASSIFICAÇÃO REESTRUTURADA ---
+        
+        # Etapa 1: Descartar comentários (prioridade máxima e sem exceções)
+        if re.match(r"^\s*(;+|//)", codigo_para_analise):
+            resultados_descartados.append({
+                "Arquivo": arquivo, "Linha": num_linha, "Variável": variaveis_str,
+                "Regra de Descarte": "Comentário", "Código": codigo_original
+            })
+            continue
+
+        # Etapa 2: Descartar rotinas não oficiais ou scripts
         classificacao_arquivo = classificar_arquivo(arquivo)
         if classificacao_arquivo in ['Não Oficiais', 'Scripts']:
             motivo = "Rotina de Script" if classificacao_arquivo == 'Scripts' else "Rotina Não Oficial"
@@ -421,29 +478,42 @@ def main():
                 "Regra de Descarte": motivo, "Código": codigo_original
             })
             continue
-
+            
+        # Etapa 3: Se não foi descartada, aplicar outras regras e classificações
+        
         # Separa os termos encontrados por tipo para aplicar lógicas distintas
         vars_na_linha = [t for t, tipo in termos_encontrados.items() if tipo == 'variavel']
         subs_na_linha = [t for t, tipo in termos_encontrados.items() if tipo == 'sub-rotina']
 
-        # 1. Lógica para Sub-rotinas (maior prioridade)
+        # 3.1: Lógica para Sub-rotinas
         if subs_na_linha:
-            # Não descarta se for comentário literal, mas a regra de descarte geral fará isso
-            is_comment_line = re.match(r"^\s*(;.*|#;.*|rem\s)", codigo_para_analise, re.IGNORECASE)
-            if not is_comment_line:
-                resultados_ajustes.append({
-                    "Arquivo": arquivo, "Linha": num_linha, "Variável": variaveis_str,
-                    "Categoria": "CHAMADA_SUBROTINA", "Padrão": "Chamada de Sub-rotina",
-                    "Justificativa": f"Chamada à(s) sub-rotina(s): {', '.join(sorted(subs_na_linha))}.", 
-                    "Código": codigo_original
-                })
-                foi_classificada = True
+            resultados_ajustes.append({
+                "Arquivo": arquivo, "Linha": num_linha, "Variável": variaveis_str,
+                "Categoria": "CHAMADA_SUBROTINA", "Padrão": "Chamada de Sub-rotina",
+                "Justificativa": f"Chamada à(s) sub-rotina(s): {', '.join(sorted(subs_na_linha))}.", 
+                "Código": codigo_original
+            })
+            foi_classificada = True
         
-        # 2. Lógica para Variáveis (se houver e não tiver sido classificada como sub-rotina)
+        # 3.2: Lógica para Variáveis (se houver e não tiver sido classificada como sub-rotina)
         if vars_na_linha and not foi_classificada:
             vars_regex_linha = r'\b(' + '|'.join(re.escape(v) for v in vars_na_linha) + r')\b'
             
-            # 2.1 Aplica regras de AJUSTE CRÍTICO
+            # Aplicar regras de DESCARTE restantes
+            for motivo, regex in REGRAS_DESCARTE_CONFIANCA:
+                if motivo == "Comentário": continue # Já foi tratado
+                
+                regex_com_vars = regex.replace('VARIAVEL', vars_regex_linha)
+                if re.search(regex_com_vars, codigo_para_analise, re.IGNORECASE):
+                    resultados_descartados.append({
+                        "Arquivo": arquivo, "Linha": num_linha, "Variável": variaveis_str,
+                        "Regra de Descarte": motivo, "Código": codigo_original
+                    })
+                    foi_classificada = True
+                    break
+            if foi_classificada: continue
+
+            # Aplicar regras de AJUSTE CRÍTICO
             for nome, regex, categoria, just in REGRAS_AJUSTE_CRITICO:
                 regex_com_vars = regex.replace('VARIAVEL', vars_regex_linha)
                 if re.search(regex_com_vars, codigo_para_analise, re.IGNORECASE):
@@ -455,24 +525,7 @@ def main():
                     break
             if foi_classificada: continue
 
-            # 2.2 Aplica regras de DESCARTE
-            for motivo, regex in REGRAS_DESCARTE_CONFIANCA:
-                regex_com_vars = regex.replace('VARIAVEL', vars_regex_linha)
-                if re.search(regex_com_vars, codigo_para_analise, re.IGNORECASE):
-                    # Exceção: Não descartar se for um comentário que deve ser revisado
-                    if motivo == "Comentário" and re.search(r"S|SET|I|IF|D|DO|K|KILL", codigo_para_analise, re.IGNORECASE):
-                        continue
-
-                    resultados_descartados.append({
-                        "Arquivo": arquivo, "Linha": num_linha, "Variável": variaveis_str,
-                        "Regra de Descarte": motivo, "Código": codigo_original
-                    })
-                    foi_classificada = True
-                    break
-            if foi_classificada: continue
-
-        # 3. Padrão: Se chegou aqui, é revisão manual
-        # Cobre casos de texto-livre e variáveis que não se encaixam em nenhuma regra
+        # Etapa 4: Padrão final -> Revisão Manual
         if not foi_classificada:
             justificativa = "Termo de texto-livre encontrado." if not vars_na_linha else "Não corresponde a nenhum padrão de ajuste ou descarte conhecido."
             resultados_ajustes.append({

@@ -44,8 +44,14 @@ def carregar_dados():
         dados['precificacao'] = {}
         try:
             xls = pd.ExcelFile(ARQUIVO_PRECIFICACAO)
-            for sheet in xls.sheet_names:
-                dados['precificacao'][sheet] = pd.read_excel(ARQUIVO_PRECIFICACAO, sheet_name=sheet)
+            sheet_map = {
+                'sumario': '1_Summary_Executivo',
+                'detalhes': '2_Estimativa_Detalhada',
+                'pontos': '3_Detalhe_Pontos_Oficiais'
+            }
+            for key, sheet_name in sheet_map.items():
+                if sheet_name in xls.sheet_names:
+                    dados['precificacao'][key] = pd.read_excel(ARQUIVO_PRECIFICACAO, sheet_name=sheet_name)
         except Exception as e:
             st.error(f"Erro ao carregar precificação: {e}")
     
@@ -80,8 +86,8 @@ pagina = st.sidebar.selectbox(
 # === PÁGINA: VISÃO EXECUTIVA ===
 if pagina == "📈 Visão Executiva":
     
-    if 'precificacao' in dados and '1_Summary_Executivo' in dados['precificacao']:
-        summary = dados['precificacao']['1_Summary_Executivo']
+    if 'precificacao' in dados and 'sumario' in dados['precificacao']:
+        summary = dados['precificacao']['sumario']
         
         st.markdown("## 🎯 Resumo Executivo - Abordagem Realista")
         
@@ -91,67 +97,70 @@ if pagina == "📈 Visão Executiva":
             metrics[row['Métrica']] = row['Valor']
         
         # Métricas principais em colunas
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4, col5 = st.columns(5)
         
         with col1:
             st.metric(
                 "Esforço Total", 
                 metrics.get('Total Estimado', 'N/A'),
-                help="Desenvolvimento + Testes QA"
+                help="Soma de todas as frentes: Desenvolvimento + Testes QA"
             )
             
         with col2:
             st.metric(
-                "Desenvolvimento", 
-                metrics.get('Esforço Desenvolvimento', 'N/A'),
-                help="Codificação + adaptações pontuais"
+                "Com Buffer 20%", 
+                metrics.get('Estimativa com Buffer 20%', 'N/A'),
+                help="Margem para imprevistos e atividades não planejadas"
             )
-            
+
         with col3:
             st.metric(
-                "Testes QA", 
-                metrics.get('Esforço Testes QA', 'N/A'),
-                help="Testes unitários + integração + regressão"
+                "Desenvolvimento", 
+                metrics.get('Esforço Desenvolvimento', 'N/A'),
+                help="Codificação, arquitetura e atividades de desenvolvimento"
             )
             
         with col4:
             st.metric(
-                "Com Buffer 20%", 
-                metrics.get('Estimativa com Buffer 20%', 'N/A'),
-                help="Margem para imprevistos"
+                "Testes QA", 
+                metrics.get('Esforço Testes QA', 'N/A'),
+                help="Testes unitários, integração, regressão e homologação"
             )
-        
-        # Destacar a abordagem realista
-        st.success("""
-        🎯 **Estimativa Realista Considerando:**
-        - ✅ Solução centralizada (funções de validação/formatação)
-        - ✅ Apenas rotinas oficiais
-        - ✅ Esforço por categoria de ajuste (não por ponto)
-        - ✅ Premissa de reutilização máxima
-        """)
-        
-        # Gráfico de distribuição por categoria de ajuste
-        if '2_Por_Categoria_Ajuste' in dados['precificacao']:
-            st.markdown("## 📊 Distribuição de Esforço por Categoria de Ajuste")
             
-            df_cat = dados['precificacao']['2_Por_Categoria_Ajuste']
+        with col5:
+            st.metric(
+                "Rotinas Impactadas",
+                str(metrics.get('Rotinas Oficiais Impactadas', 'N/A')),
+                help="Número de programas/rotinas oficiais únicos que sofrerão alterações."
+            )
+
+        # Gráfico de distribuição por frente de trabalho
+        if 'detalhes' in dados['precificacao']:
+            st.markdown("## 📊 Distribuição de Esforço por Frente de Trabalho")
+            
+            df_cat = dados['precificacao']['detalhes']
             
             # Gráfico de barras horizontais
             fig_bar = px.bar(
                 df_cat, 
                 x='Total (h)', 
-                y='Categoria',
-                title="Esforço por Categoria de Ajuste (Dev + Testes)",
+                y='Frente de Trabalho',
+                title="Esforço por Frente de Trabalho (Dev + Testes)",
                 orientation='h',
-                text='Total (h)'
+                text='Total (h)',
+                color='Tipo',
+                color_discrete_map={
+                    'Atividade Base': '#4682B4',
+                    'Ajuste de Código': '#FF8C00'
+                }
             )
             fig_bar.update_traces(texttemplate='%{text}h', textposition='outside')
-            fig_bar.update_layout(height=500)
+            fig_bar.update_layout(height=500, yaxis={'categoryorder':'total ascending'})
             st.plotly_chart(fig_bar, use_container_width=True)
             
             # Tabela com detalhes
-            st.markdown("### 📋 Detalhamento por Categoria")
-            df_display = df_cat[['Categoria', 'Pontos Identificados', 'Esforço Dev (h)', 'Esforço Testes (h)', 'Total (h)', 'Observação']].copy()
+            st.markdown("### 📋 Detalhamento por Frente")
+            df_display = df_cat[['Frente de Trabalho', 'Tipo', 'Pontos Identificados', 'Esforço Dev (h)', 'Esforço Testes (h)', 'Total (h)', 'Observação']].copy()
             st.dataframe(df_display, use_container_width=True)
     
     else:
@@ -160,74 +169,66 @@ if pagina == "📈 Visão Executiva":
 # === PÁGINA: PRECIFICAÇÃO DETALHADA ===
 elif pagina == "💰 Precificação Detalhada":
     
-    if 'precificacao' in dados:
+    if 'precificacao' in dados and 'detalhes' in dados['precificacao']:
         st.markdown("## 💰 Análise Detalhada para Precificação")
         
-        # Summary por categoria de ajuste
-        if '2_Por_Categoria_Ajuste' in dados['precificacao']:
-            df_cat = dados['precificacao']['2_Por_Categoria_Ajuste']
-            
-            st.markdown("### 🔧 Estratégia de Implementação")
-            
-            # Gráfico comparativo Dev vs Testes
-            fig_comp = go.Figure()
-            fig_comp.add_trace(go.Bar(
-                name='Desenvolvimento',
-                x=df_cat['Categoria'],
-                y=df_cat['Esforço Dev (h)'],
-                marker_color='lightblue'
-            ))
-            fig_comp.add_trace(go.Bar(
-                name='Testes QA',
-                x=df_cat['Categoria'],
-                y=df_cat['Esforço Testes (h)'],
-                marker_color='lightcoral'
-            ))
-            
-            fig_comp.update_layout(
-                title="Distribuição de Esforço: Desenvolvimento vs Testes",
-                barmode='stack',
-                height=500
-            )
-            st.plotly_chart(fig_comp, use_container_width=True)
-            
-            # Cards expandíveis por categoria
-            st.markdown("### 🎯 Detalhamento por Categoria")
-            for _, row in df_cat.iterrows():
-                with st.expander(f"📋 {row['Categoria']} - {row['Total (h)']}h"):
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        pontos_str = str(row['Pontos Identificados']) if pd.notna(row['Pontos Identificados']) else 'Base'
-                        st.metric("Pontos", pontos_str)
-                    with col2:
-                        st.metric("Dev", f"{row['Esforço Dev (h)']}h")
-                    with col3:
-                        st.metric("Testes", f"{row['Esforço Testes (h)']}h")
-                    
-                    st.markdown(f"**Estratégia:** {row['Observação']}")
-                    st.markdown(f"**Descrição:** {row['Descrição']}")
+        df_detalhes = dados['precificacao']['detalhes']
         
-        # Summary por módulo oficial
-        if '3_Por_Modulo_Oficiais' in dados['precificacao']:
-            st.markdown("### 🏗️ Distribuição por Módulo (Apenas Oficiais)")
-            df_mod = dados['precificacao']['3_Por_Modulo_Oficiais']
-            
-            # Gráfico de pizza dos top módulos
-            top_modulos = df_mod.nlargest(10, 'Pontos Totais')
-            
-            fig_pizza = px.pie(
-                top_modulos,
-                values='Pontos Totais',
-                names='Prefixo Módulo',
-                title="Top 10 Módulos por Quantidade de Pontos"
-            )
-            st.plotly_chart(fig_pizza, use_container_width=True)
-            
-            # Tabela detalhada
-            st.dataframe(df_mod, use_container_width=True)
-    
+        st.markdown("### 🔧 Estratégia de Implementação e Esforço")
+        
+        # Gráfico comparativo Dev vs Testes
+        fig_comp = go.Figure()
+        fig_comp.add_trace(go.Bar(
+            name='Desenvolvimento',
+            x=df_detalhes['Frente de Trabalho'],
+            y=df_detalhes['Esforço Dev (h)'],
+            marker_color='lightblue'
+        ))
+        fig_comp.add_trace(go.Bar(
+            name='Testes QA',
+            x=df_detalhes['Frente de Trabalho'],
+            y=df_detalhes['Esforço Testes (h)'],
+            marker_color='lightcoral'
+        ))
+        
+        fig_comp.update_layout(
+            title="Distribuição de Esforço: Desenvolvimento vs Testes por Frente",
+            barmode='stack',
+            height=500,
+            xaxis={'categoryorder':'total descending'}
+        )
+        st.plotly_chart(fig_comp, use_container_width=True)
+        
+        # Cards expandíveis por tipo de atividade
+        st.markdown("### 🎯 Detalhamento por Tipo de Atividade")
+        
+        st.subheader("Atividades Base do Projeto")
+        df_base = df_detalhes[df_detalhes['Tipo'] == 'Atividade Base']
+        for _, row in df_base.iterrows():
+            with st.expander(f"📋 {row['Frente de Trabalho']} - {row['Total (h)']}h"):
+                st.markdown(f"**Estratégia:** {row['Observação']}")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Esforço Dev", f"{row['Esforço Dev (h)']}h")
+                with col2:
+                    st.metric("Esforço Testes", f"{row['Esforço Testes (h)']}h")
+
+        st.subheader("Ajustes de Código em Rotinas Oficiais")
+        df_ajuste = df_detalhes[df_detalhes['Tipo'] == 'Ajuste de Código']
+        for _, row in df_ajuste.iterrows():
+            with st.expander(f"📋 {row['Frente de Trabalho']} - {row['Total (h)']}h"):
+                st.markdown(f"**Estratégia:** {row['Observação']}")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    pontos_str = str(row['Pontos Identificados']) if pd.notna(row['Pontos Identificados']) else 'N/A'
+                    st.metric("Pontos Críticos", pontos_str)
+                with col2:
+                    st.metric("Esforço Dev", f"{row['Esforço Dev (h)']}h")
+                with col3:
+                    st.metric("Esforço Testes", f"{row['Esforço Testes (h)']}h")
+
     else:
-        st.warning("⚠️ Dados de precificação não encontrados.")
+        st.warning("⚠️ Dados de precificação não encontrados. Execute o script principal primeiro.")
 
 # === PÁGINA: ANÁLISE POR CATEGORIA ===
 elif pagina == "🎯 Análise por Categoria RF":
