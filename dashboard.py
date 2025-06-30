@@ -33,13 +33,18 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
     # Usando st.spinner para uma melhor UX
     with st.spinner('Executando main.py... Por favor, aguarde.'):
         try:
+            # Garante que o processo filho use UTF-8 para I/O, resolvendo problemas de encoding no Windows.
+            env = os.environ.copy()
+            env['PYTHONIOENCODING'] = 'UTF-8'
+
             # Comando para executar o script. '-u' para unbuffered output.
             process = subprocess.Popen(
                 ['python', '-u', 'main.py'],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 encoding='utf-8',
-                text=True
+                text=True,
+                env=env
             )
 
             log_output = ""
@@ -64,14 +69,14 @@ if 'run_analysis' in st.session_state and st.session_state.run_analysis:
     st.session_state.run_analysis = False
     st.session_state.analysis_done = True
     st.cache_data.clear() # Limpa o cache para forçar o recarregamento dos dados
-    st.experimental_rerun() # Força o rerun do script do dashboard
+    st.rerun() # Força o rerun do script do dashboard
 
 if 'analysis_done' in st.session_state and st.session_state.analysis_done:
     st.sidebar.code(st.session_state.analysis_output, language='log')
     if st.sidebar.button("Limpar Log"):
         st.session_state.analysis_done = False
         st.session_state.analysis_output = ""
-        st.experimental_rerun()
+        st.rerun()
 
 # Configuração de arquivos
 ARQUIVO_AJUSTES = 'analise_ajustes_criticos.xlsx'
